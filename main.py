@@ -11,6 +11,7 @@ FastAPI backend для Mini App "Поделим".
 Авторизация — через заголовок X-Telegram-Init-Data (это initData из
 Telegram.WebApp), проверяется в telegram_auth.validate_init_data.
 """
+import logging
 from decimal import Decimal
 
 from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Form, Request
@@ -25,6 +26,8 @@ from splitter import compute_split
 from telegram_auth import validate_init_data
 from config import USE_WEBHOOK, PUBLIC_BACKEND_URL, WEBHOOK_SECRET
 from bot import bot as tg_bot, dp as tg_dp
+
+logger = logging.getLogger("podelim")
 
 app = FastAPI(title="Podelim API")
 
@@ -124,8 +127,15 @@ def create_bill(
     image_bytes = photo.file.read()
     try:
         parsed = parse_receipt(image_bytes)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Не удалось распознать чек: {e}")
+    except Exception:
+        # Полный текст ошибки — только в серверный лог (для отладки).
+        # Пользователю показываем короткое человеческое сообщение, без
+        # технических деталей (класс исключения, стектрейс и т.п.).
+        logger.exception("Не удалось распознать чек")
+        raise HTTPException(
+            status_code=422,
+            detail="Не смогли распознать чек. Попробуй сфотографировать при хорошем свете, без бликов и так, чтобы весь чек попал в кадр.",
+        )
 
     subtotal = parsed.get("subtotal")
     if subtotal is None:

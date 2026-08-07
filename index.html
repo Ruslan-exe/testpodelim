@@ -40,6 +40,13 @@
   .total-row { display: flex; justify-content: space-between; font-size: 17px; font-weight: 700; margin-top: 10px; }
   .split-row { display: flex; justify-content: space-between; padding: 8px 0; }
   .warn { color: #e0a000; font-size: 13px; margin-top: 6px; }
+  .error-card {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: rgba(224,64,64,.08); border: 1px solid rgba(224,64,64,.25);
+    border-radius: 14px; padding: 14px; margin-top: 10px;
+    font-size: 14px; line-height: 1.4; color: inherit;
+  }
+  .error-card .error-icon { font-size: 18px; flex-shrink: 0; }
   .item-select { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .checkbox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(128,128,128,.5); flex-shrink: 0; }
   .checkbox.checked { background: var(--tg-theme-button-color, #2ea6ff); border-color: var(--tg-theme-button-color, #2ea6ff); }
@@ -58,7 +65,7 @@ tg.ready();
 tg.expand();
 
 // !!! ЗАМЕНИТЬ на реальный адрес backend после деплоя (см. README) !!!
-const API_BASE = "https://testpodelim.onrender.com";
+const API_BASE = "https://YOUR-BACKEND-DOMAIN.example.com";
 
 const initData = tg.initData || "";
 const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
@@ -74,14 +81,28 @@ async function api(path, options = {}) {
     headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
+    // Backend всегда кладёт человекочитаемый текст в поле "detail" —
+    // показываем только его, без кода ответа и служебных подробностей.
+    let message = "Что-то пошло не так. Попробуй ещё раз.";
+    try {
+      const body = await res.json();
+      if (body && body.detail) message = body.detail;
+    } catch (_) {
+      // тело ответа не JSON — оставляем сообщение по умолчанию
+    }
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
 
 function fmt(n) {
   return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+}
+
+function errorCard(message) {
+  return `<div class="error-card"><span class="error-icon">⚠️</span><span>${message}</span></div>`;
 }
 
 // ---------- Экран 1: создать счёт (нет активного billId) ----------
@@ -114,7 +135,8 @@ async function onPhotoSelected(e) {
     history.replaceState(null, "", `?startapp=${bill.id}`);
     renderBill(bill);
   } catch (err) {
-    status.textContent = "Не получилось распознать чек: " + err.message + ". Попробуй фото почётче.";
+    status.className = "";
+    status.innerHTML = errorCard(err.message);
   }
 }
 
@@ -124,7 +146,7 @@ async function loadAndRenderBill() {
     const bill = await api(`/api/bills/${currentBillId}`);
     renderBill(bill);
   } catch (err) {
-    app.innerHTML = `<div class="muted">Счёт не найден или устарел.</div>`;
+    app.innerHTML = errorCard("Счёт не найден или устарел.");
   }
 }
 
@@ -170,7 +192,7 @@ function renderBill(bill) {
   });
   document.getElementById("splitBtn").addEventListener("click", () => renderSplit(bill.id));
   document.getElementById("inviteBtn").addEventListener("click", () => {
-    const botUsername = "@testpodelim_bot"; // см. README — подставить username бота
+    const botUsername = "YOUR_BOT_USERNAME"; // см. README — подставить username бота
     const link = `https://t.me/${botUsername}?startapp=${bill.id}`;
     tg.switchInlineQuery ? tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Скинь свою долю по чеку 👇')}`) : navigator.clipboard.writeText(link);
   });
@@ -190,7 +212,7 @@ async function toggleClaim(el, billId) {
     }
     loadAndRenderBill();
   } catch (err) {
-    tg.showAlert("Ошибка: " + err.message);
+    tg.showAlert(err.message);
   }
 }
 
@@ -208,7 +230,7 @@ async function renderSplit(billId) {
 
     box.innerHTML = `<div class="card">${rows}${warn}</div>`;
   } catch (err) {
-    box.innerHTML = `<div class="muted">Ошибка: ${err.message}</div>`;
+    box.innerHTML = errorCard(err.message);
   }
 }
 
