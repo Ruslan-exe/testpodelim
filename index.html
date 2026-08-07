@@ -58,7 +58,7 @@ tg.ready();
 tg.expand();
 
 // !!! ЗАМЕНИТЬ на реальный адрес backend после деплоя (см. README) !!!
-const API_BASE = "https://YOUR-BACKEND-DOMAIN.example.com";
+const API_BASE = "https://testpodelim.onrender.com";
 
 const initData = tg.initData || "";
 const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
@@ -170,7 +170,7 @@ function renderBill(bill) {
   });
   document.getElementById("splitBtn").addEventListener("click", () => renderSplit(bill.id));
   document.getElementById("inviteBtn").addEventListener("click", () => {
-    const botUsername = "YOUR_BOT_USERNAME"; // см. README — подставить username бота
+    const botUsername = "@testpodelim_bot"; // см. README — подставить username бота
     const link = `https://t.me/${botUsername}?startapp=${bill.id}`;
     tg.switchInlineQuery ? tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Скинь свою долю по чеку 👇')}`) : navigator.clipboard.writeText(link);
   });
