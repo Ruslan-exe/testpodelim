@@ -32,6 +32,7 @@ def _migrate():
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
 
     add_column_if_missing("users", "lang", "lang VARCHAR DEFAULT 'ru'")
+    add_column_if_missing("users", "referred_by", "referred_by INTEGER")
     add_column_if_missing("participants", "confirmed", "confirmed BOOLEAN DEFAULT 0")
 
 

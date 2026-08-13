@@ -21,8 +21,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from aiogram.types import Update
 
+from sqlalchemy import func, or_, and_
+
 from database import get_db, init_db
-from models import User, Bill, Item, Participant, ItemShare
+from models import User, Bill, Item, Participant, ItemShare, Friendship
 from ocr import parse_receipt
 from splitter import compute_split
 from telegram_auth import validate_init_data
@@ -111,10 +113,29 @@ def _serialize_bill(bill: Bill) -> dict:
             for item in bill.items
         ],
         "participants": [
-            {"user_id": p.user_id, "name": p.display_name, "confirmed": bool(p.confirmed)}
+            {
+                "user_id": p.user_id,
+                "name": p.display_name,
+                "confirmed": bool(p.confirmed),
+                "is_guest": (p.user_id or 0) < 0,  # гости без Telegram имеют отрицательные id
+            }
             for p in bill.participants
         ],
     }
+
+
+def _ensure_friends(db: Session, a: int, b: int):
+    """Создать связь "друзья", если её ещё нет. Гости (id<0) не учитываются."""
+    if not a or not b or a == b or a < 0 or b < 0:
+        return
+    exists = db.query(Friendship).filter(
+        or_(
+            and_(Friendship.user_id == a, Friendship.friend_id == b),
+            and_(Friendship.user_id == b, Friendship.friend_id == a),
+        )
+    ).first()
+    if not exists:
+        db.add(Friendship(user_id=a, friend_id=b))
 
 
 def _reset_confirmations(bill: Bill):
@@ -188,10 +209,29 @@ def get_bill(bill_id: int, db: Session = Depends(get_db), user: User = Depends(g
     already = any(p.user_id == user.id for p in bill.participants)
     if not already:
         db.add(Participant(bill_id=bill.id, user_id=user.id, display_name=user.first_name))
+        # Совместный счёт = автоматически друзья с создателем
+        _ensure_friends(db, user.id, bill.creator_id)
         db.commit()
         db.refresh(bill)
 
     return _serialize_bill(bill)
+
+
+def _claim_target(bill: Bill, user: User, for_user_id: int | None) -> int:
+    """Чью долю меняем. За себя — всегда можно; за другого — только если
+    это ГОСТЬ (id<0) этого счёта: у гостя нет Telegram, за него отмечает
+    компания. За других реальных пользователей отмечать нельзя (антифрод)."""
+    if not for_user_id or for_user_id == user.id:
+        return user.id
+    is_guest_participant = any(
+        p.user_id == for_user_id and (p.user_id or 0) < 0 for p in bill.participants
+    )
+    if not is_guest_participant:
+        raise HTTPException(
+            status_code=403,
+            detail="Отмечать позиции можно только за себя или за гостя без Telegram",
+        )
+    return for_user_id
 
 
 @app.post("/api/bills/{bill_id}/claims")
@@ -199,6 +239,7 @@ def claim_item(
     bill_id: int,
     item_id: int = Form(...),
     weight: float = Form(default=1.0),
+    for_user_id: int | None = Form(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -206,13 +247,19 @@ def claim_item(
     if not item or item.bill_id != bill_id:
         raise HTTPException(status_code=404, detail="Позиция не найдена")
 
-    existing = next((s for s in item.shares if s.user_id == user.id), None)
+    bill = db.get(Bill, bill_id)
+    target_id = _claim_target(bill, user, for_user_id)
+
+    existing = next((s for s in item.shares if s.user_id == target_id), None)
     if existing:
         existing.weight = weight
     else:
-        db.add(ItemShare(item_id=item_id, user_id=user.id, weight=weight))
-    bill = db.get(Bill, bill_id)
-    _reset_my_confirmation(bill, user.id)
+        db.add(ItemShare(item_id=item_id, user_id=target_id, weight=weight))
+    if target_id == user.id:
+        _reset_my_confirmation(bill, user.id)
+    else:
+        # Отметка за гостя меняет доли всех — все перепроверяют
+        _reset_confirmations(bill)
     db.commit()
     db.refresh(bill)
     return _serialize_bill(bill)
@@ -222,6 +269,7 @@ def claim_item(
 def unclaim_item(
     bill_id: int,
     item_id: int,
+    for_user_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -229,11 +277,16 @@ def unclaim_item(
     if not item or item.bill_id != bill_id:
         raise HTTPException(status_code=404, detail="Позиция не найдена")
 
-    existing = next((s for s in item.shares if s.user_id == user.id), None)
+    bill = db.get(Bill, bill_id)
+    target_id = _claim_target(bill, user, for_user_id)
+
+    existing = next((s for s in item.shares if s.user_id == target_id), None)
     if existing:
         db.delete(existing)
-    bill = db.get(Bill, bill_id)
-    _reset_my_confirmation(bill, user.id)
+    if target_id == user.id:
+        _reset_my_confirmation(bill, user.id)
+    else:
+        _reset_confirmations(bill)
     db.commit()
     db.refresh(bill)
     return _serialize_bill(bill)
@@ -248,7 +301,8 @@ def get_split(bill_id: int, db: Session = Depends(get_db), user: User = Depends(
     result = _bill_split(bill)
 
     names = {p.user_id: (p.display_name or str(p.user_id)) for p in bill.participants}
-    confirmed = {p.user_id: bool(p.confirmed) for p in bill.participants}
+    # Гости (id<0) не подтверждают — у них нет Telegram
+    confirmed = {p.user_id: bool(p.confirmed) for p in bill.participants if (p.user_id or 0) > 0}
 
     return {
         "currency": bill.currency,
@@ -317,6 +371,8 @@ def get_me(db: Session = Depends(get_db), user: User = Depends(get_current_user)
     for b in bills:
         per_user = _bill_split(b)["per_user"]
         total_spent += per_user.get(user.id, Decimal("0"))
+    friends_count = len(_friends_of(db, user.id))
+    invited_count = db.query(func.count(User.id)).filter(User.referred_by == user.id).scalar() or 0
     return {
         "id": user.id,
         "first_name": user.first_name,
@@ -325,6 +381,8 @@ def get_me(db: Session = Depends(get_db), user: User = Depends(get_current_user)
         "lang": user.lang or "ru",
         "bills_count": len(bills),
         "total_spent": str(total_spent),
+        "friends_count": friends_count,
+        "invited_count": invited_count,
     }
 
 
@@ -572,6 +630,120 @@ def unconfirm_choice(bill_id: int, db: Session = Depends(get_db), user: User = D
             db.refresh(bill)
             return _serialize_bill(bill)
     raise HTTPException(status_code=403, detail="Вы не участник этого счёта")
+
+
+# ============================================================
+#  Друзья и реферальная система
+# ============================================================
+
+class ReferralPayload(BaseModel):
+    ref_id: int
+
+
+class FriendPayload(BaseModel):
+    user_id: int
+
+
+class GuestPayload(BaseModel):
+    name: str
+
+
+def _friends_of(db: Session, user_id: int) -> list[User]:
+    rows = db.query(Friendship).filter(
+        or_(Friendship.user_id == user_id, Friendship.friend_id == user_id)
+    ).all()
+    ids = {(r.friend_id if r.user_id == user_id else r.user_id) for r in rows}
+    ids.discard(user_id)
+    if not ids:
+        return []
+    return db.query(User).filter(User.id.in_(ids), User.id > 0).all()
+
+
+@app.get("/api/friends")
+def list_friends(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    friends = _friends_of(db, user.id)
+    invited_ids = {
+        u.id for u in db.query(User).filter(User.referred_by == user.id).all()
+    }
+    return [
+        {
+            "user_id": f.id,
+            "name": f.first_name or (f.username and "@" + f.username) or str(f.id),
+            "username": f.username,
+            "invited_by_me": f.id in invited_ids,
+        }
+        for f in sorted(friends, key=lambda x: (x.first_name or "").lower())
+    ]
+
+
+@app.post("/api/friends/referral")
+def apply_referral(
+    payload: ReferralPayload,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Пользователь открыл приложение по реферальной ссылке друга
+    (t.me/<bot>?startapp=ref_<id>). Закрепляем связь."""
+    ref = db.get(User, payload.ref_id)
+    if not ref or ref.id == user.id or ref.id < 0:
+        return {"ok": False}
+    _ensure_friends(db, user.id, ref.id)
+    if user.referred_by is None:
+        user.referred_by = ref.id
+    db.commit()
+    return {"ok": True, "friend": ref.first_name}
+
+
+@app.post("/api/bills/{bill_id}/participants")
+def add_participant_from_friends(
+    bill_id: int,
+    payload: FriendPayload,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Добавить в счёт участника из списка друзей."""
+    bill = db.get(Bill, bill_id)
+    if not bill:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
+    friend_ids = {f.id for f in _friends_of(db, user.id)}
+    if payload.user_id not in friend_ids:
+        raise HTTPException(status_code=403, detail="Можно добавлять только своих друзей")
+    if not any(p.user_id == payload.user_id for p in bill.participants):
+        friend = db.get(User, payload.user_id)
+        db.add(Participant(
+            bill_id=bill.id, user_id=friend.id, display_name=friend.first_name,
+        ))
+        _ensure_friends(db, friend.id, bill.creator_id)
+        db.commit()
+        db.refresh(bill)
+    return _serialize_bill(bill)
+
+
+@app.post("/api/bills/{bill_id}/guests")
+def add_guest(
+    bill_id: int,
+    payload: GuestPayload,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Добавить участника БЕЗ Telegram — просто по имени. Ему создаётся
+    "гостевой" пользователь с отрицательным id; отмечать его позиции
+    может любой участник счёта."""
+    bill = db.get(Bill, bill_id)
+    if not bill:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Имя не может быть пустым")
+
+    min_id = db.query(func.min(User.id)).scalar() or 0
+    guest = User(id=min(min_id, 0) - 1, first_name=name)
+    db.add(guest)
+    db.flush()
+    db.add(Participant(bill_id=bill.id, user_id=guest.id, display_name=name))
+    db.commit()
+    db.refresh(bill)
+    return _serialize_bill(bill)
 
 
 @app.delete("/api/bills/{bill_id}/items/{item_id}")

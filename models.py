@@ -19,11 +19,23 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)  # это же telegram_id
+    id = Column(Integer, primary_key=True)  # это же telegram_id; ОТРИЦАТЕЛЬНЫЕ id — гости без Telegram
     phone = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     username = Column(String, nullable=True)
     lang = Column(String, default="ru")  # ru | uz | en — язык интерфейса
+    referred_by = Column(Integer, nullable=True)  # telegram_id пригласившего (реферальная система)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Friendship(Base):
+    """Связь "друзья" — создаётся по реферальной ссылке или автоматически,
+    когда люди делят один счёт. Хранится одна строка на пару (обе стороны)."""
+    __tablename__ = "friendships"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    friend_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

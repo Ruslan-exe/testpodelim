@@ -401,6 +401,64 @@ input[type=file] { display: none; }
 }
 .back-btn:active { transform: scale(0.95); }
 
+/* ---------- Онбординг ---------- */
+#onboarding {
+  position: fixed; inset: 0; z-index: 300;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+.onb-skip {
+  position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 18px;
+  border: none; background: none; color: var(--hint); font-size: 14px;
+  font-weight: 600; font-family: inherit; cursor: pointer; padding: 6px;
+}
+.onb-body {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  text-align: center; max-width: 420px; margin: 0 auto; width: 100%;
+  animation: page-in 240ms var(--ease-out);
+}
+.onb-emoji { font-size: 72px; margin-bottom: 18px; }
+.onb-title { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; }
+.onb-desc { font-size: 15px; color: var(--hint); line-height: 1.55; margin-bottom: 28px; }
+.onb-langs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.onb-lang {
+  padding: 15px; border-radius: var(--r-md); background: var(--card);
+  font-size: 16px; font-weight: 600; cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 150ms ease, transform 160ms var(--ease-out);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.onb-lang:active { transform: scale(0.97); }
+.onb-lang.on { border-color: var(--accent); color: var(--accent); }
+.onb-dots { display: flex; gap: 6px; justify-content: center; margin-bottom: 18px; }
+.onb-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: color-mix(in srgb, var(--hint) 30%, transparent);
+  transition: background 200ms ease, transform 200ms var(--ease-out);
+}
+.onb-dot.on { background: var(--accent); transform: scale(1.25); }
+.onb-later {
+  border: none; background: none; color: var(--hint); font-size: 14px;
+  font-family: inherit; cursor: pointer; margin-top: 14px; padding: 6px;
+}
+
+/* ---------- Друзья ---------- */
+.friend-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 0; border-bottom: 1px solid var(--line);
+}
+.friend-row:last-child { border-bottom: none; }
+.friend-ava {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent); font-weight: 700; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.friend-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14.5px; }
+.friend-badge { font-size: 10.5px; color: var(--hint); }
+
 @media (prefers-reduced-motion: reduce) {
   .page.active, .stagger > * { animation: none; opacity: 1; transform: none; }
   .scan-line { animation-duration: 2.5s; }
@@ -490,6 +548,30 @@ const I18N = {
     open_via_tg: "Откройте приложение через Telegram-бота — напрямую в браузере оно не работает.",
     loading: "Загрузка…", bill_not_found: "Счёт не найден или устарел.",
     currency_uzs: "сум",
+    onb1_title: "Добро пожаловать в Поделим!",
+    onb1_sub: "Делите счета с друзьями честно — без споров и калькулятора",
+    choose_lang: "Выберите язык", continue_btn: "Продолжить",
+    onb_phone_t: "Подтвердите номер",
+    onb_phone_d: "Номер телефона нужен для входа в аккаунт и сохранения ваших счетов и долгов",
+    onb_phone_btn: "📱 Поделиться номером", phone_done: "Номер получен ✅", later: "Позже",
+    skip: "Пропустить", next: "Далее", lets_go: "Начать",
+    sl1_t: "Один чек — на всех",
+    sl1_d: "Платит один — делят все. Отсканируйте чек или впишите траты вручную: каждый отметит своё, и суммы сойдутся до копейки.",
+    sl2_t: "Долги под контролем",
+    sl2_d: "Всегда видно, кто должен вам и кому должны вы. Никаких неловких напоминаний — всё зафиксировано в приложении.",
+    sl3_t: "Понимайте свои траты",
+    sl3_d: "Статистика по дням, неделям и месяцам покажет, куда уходят деньги. Ваши личные финансы — под контролем.",
+    friends: "Друзья", invite_friend: "＋ Пригласить друга",
+    no_friends: "Пока нет друзей. Пригласите по ссылке — и добавляйте их в счёт в один тап.",
+    ref_share_text: "Присоединяйся к Поделим — делим счета честно и без споров 👇",
+    invited_you: "приглашён вами", friend_added: "Добавлен в счёт ✅",
+    add_participant: "Добавить участника", from_friends: "Из друзей",
+    or_guest: "Гость без Telegram", guest_name: "Имя гостя", add_guest: "Добавить гостя",
+    guest: "гость", pick_who: "Кто ел эту позицию?",
+    all_in_bill: "Все друзья уже в счёте",
+    retry: "Повторить",
+    err_net: "Не удалось загрузить данные. Бесплатный сервер мог «уснуть» — подождите 30–60 секунд и попробуйте снова.",
+    stat_friends: "друзей", stat_invited: "приглашено вами",
   },
   uz: {
     tab_home: "Asosiy", tab_splits: "Xarajatlar", tab_scan: "Skan", tab_profile: "Profil",
@@ -527,6 +609,30 @@ const I18N = {
     open_via_tg: "Ilovani Telegram-bot orqali oching — brauzerda to'g'ridan-to'g'ri ishlamaydi.",
     loading: "Yuklanmoqda…", bill_not_found: "Chek topilmadi yoki eskirgan.",
     currency_uzs: "so'm",
+    onb1_title: "Podelimga xush kelibsiz!",
+    onb1_sub: "Do'stlar bilan cheklarni adolatli bo'ling — bahs va kalkulyatorsiz",
+    choose_lang: "Tilni tanlang", continue_btn: "Davom etish",
+    onb_phone_t: "Raqamni tasdiqlang",
+    onb_phone_d: "Telefon raqami hisobga kirish hamda cheklar va qarzlaringizni saqlash uchun kerak",
+    onb_phone_btn: "📱 Raqamni ulashish", phone_done: "Raqam qabul qilindi ✅", later: "Keyinroq",
+    skip: "O'tkazib yuborish", next: "Keyingi", lets_go: "Boshlash",
+    sl1_t: "Bitta chek — hammaga",
+    sl1_d: "Bittangiz to'laydi — hamma bo'lishadi. Chekni skanerlang yoki qo'lda kiriting: har kim o'zinikini belgilaydi va summalar tiyin-tiyingacha to'g'ri chiqadi.",
+    sl2_t: "Qarzlar nazoratda",
+    sl2_d: "Kim sizga qarz va siz kimga qarzligingiz doim ko'rinib turadi. Noqulay eslatmalar yo'q — hammasi ilovada qayd etilgan.",
+    sl3_t: "Xarajatlaringizni tushuning",
+    sl3_d: "Kun, hafta va oy bo'yicha statistika pullar qayoqqa ketayotganini ko'rsatadi. Shaxsiy moliyangiz — nazorat ostida.",
+    friends: "Do'stlar", invite_friend: "＋ Do'st taklif qilish",
+    no_friends: "Hozircha do'stlar yo'q. Havola orqali taklif qiling — va ularni bir bosishda chekka qo'shing.",
+    ref_share_text: "Podelimga qo'shil — cheklarni adolatli va bahssiz bo'lamiz 👇",
+    invited_you: "siz taklif qilgansiz", friend_added: "Chekka qo'shildi ✅",
+    add_participant: "Ishtirokchi qo'shish", from_friends: "Do'stlardan",
+    or_guest: "Telegramsiz mehmon", guest_name: "Mehmon ismi", add_guest: "Mehmon qo'shish",
+    guest: "mehmon", pick_who: "Bu pozitsiyani kim yedi?",
+    all_in_bill: "Barcha do'stlar allaqachon chekda",
+    retry: "Qayta urinish",
+    err_net: "Ma'lumotlarni yuklab bo'lmadi. Bepul server «uxlab qolgan» bo'lishi mumkin — 30–60 soniya kutib, qayta urining.",
+    stat_friends: "do'stlar", stat_invited: "siz taklif qilgan",
   },
   en: {
     tab_home: "Home", tab_splits: "Splits", tab_scan: "Scan", tab_profile: "Profile",
@@ -564,6 +670,30 @@ const I18N = {
     open_via_tg: "Open this app via the Telegram bot — it doesn't work directly in a browser.",
     loading: "Loading…", bill_not_found: "Bill not found or expired.",
     currency_uzs: "UZS",
+    onb1_title: "Welcome to Podelim!",
+    onb1_sub: "Split bills with friends fairly — no arguments, no calculator",
+    choose_lang: "Choose your language", continue_btn: "Continue",
+    onb_phone_t: "Confirm your number",
+    onb_phone_d: "Your phone number is used to sign in and keep your bills and debts safe",
+    onb_phone_btn: "📱 Share phone number", phone_done: "Number received ✅", later: "Later",
+    skip: "Skip", next: "Next", lets_go: "Get started",
+    sl1_t: "One receipt — for everyone",
+    sl1_d: "One person pays — everyone splits. Scan the receipt or add expenses manually: each marks their items and the totals match to the cent.",
+    sl2_t: "Debts under control",
+    sl2_d: "Always see who owes you and whom you owe. No awkward reminders — everything is recorded in the app.",
+    sl3_t: "Understand your spending",
+    sl3_d: "Daily, weekly and monthly stats show where your money goes. Your personal finances — under control.",
+    friends: "Friends", invite_friend: "＋ Invite a friend",
+    no_friends: "No friends yet. Invite them with your link — and add them to a bill in one tap.",
+    ref_share_text: "Join Podelim — split bills fairly, no arguments 👇",
+    invited_you: "invited by you", friend_added: "Added to the bill ✅",
+    add_participant: "Add participant", from_friends: "From friends",
+    or_guest: "Guest without Telegram", guest_name: "Guest name", add_guest: "Add guest",
+    guest: "guest", pick_who: "Who had this item?",
+    all_in_bill: "All friends are already in the bill",
+    retry: "Retry",
+    err_net: "Couldn't load data. The free server may be waking up — wait 30–60 seconds and try again.",
+    stat_friends: "friends", stat_invited: "invited by you",
   },
 };
 
@@ -589,12 +719,36 @@ const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
 detectLang(me);
 
 async function api(path, options = {}) {
-  const res = await fetch(API_BASE + path, {
-    ...options,
-    headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
-  });
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-  return res.json();
+  // Таймаут 45с: бесплатный Render "просыпается" до минуты; без таймаута
+  // экран навсегда остаётся в состоянии загрузки.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
+  try {
+    const res = await fetch(API_BASE + path, {
+      ...options,
+      signal: ctrl.signal,
+      headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Экран ошибки с кнопкой "Повторить" — вместо вечных скелетонов
+function errorState(retryFn) {
+  const id = "retry_" + Math.random().toString(36).slice(2, 8);
+  setTimeout(() => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener("click", retryFn);
+  }, 0);
+  return `
+    <div class="empty">
+      <div class="ico">📡</div>
+      <div class="t">${t("err_net")}</div>
+      <button class="btn ghost small" id="${id}" style="margin-top:14px">↻ ${t("retry")}</button>
+    </div>`;
 }
 const apiJson = (path, method, body) =>
   api(path, { method, body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
@@ -683,7 +837,7 @@ async function renderHome() {
     ]);
     renderHomeContent(el, summary, debts);
   } catch (e) {
-    el.innerHTML = `<h1>${t("hello")} 👋</h1><div class="empty"><div class="ico">📡</div><div class="t">${esc(e.message)}</div></div>`;
+    el.innerHTML = `<h1>${t("hello")} 👋</h1>` + errorState(renderHome);
   }
 }
 
@@ -791,7 +945,7 @@ async function renderSplits() {
     el.querySelectorAll("[data-bill]").forEach((c) =>
       c.addEventListener("click", () => openBill(c.dataset.bill)));
   } catch (e) {
-    el.innerHTML = `<h1>${t("my_splits")}</h1><div class="empty"><div class="ico">📡</div><div class="t">${esc(e.message)}</div></div>`;
+    el.innerHTML = `<h1>${t("my_splits")}</h1>` + errorState(renderSplits);
   }
 }
 
@@ -880,11 +1034,33 @@ async function onPhotoSelected(e) {
 /* ============================================================
    Страница 4 — Профиль
    ============================================================ */
+function referralLink() {
+  return `https://t.me/${BOT_USERNAME}?startapp=ref_${me.id}`;
+}
+
+function shareReferral() {
+  haptic();
+  const link = referralLink();
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t("ref_share_text"))}`;
+  try { tg.openTelegramLink(shareUrl); }
+  catch (e) { navigator.clipboard.writeText(link); toast("🔗 " + link); }
+}
+
 async function renderProfile() {
   const el = document.getElementById("page-profile");
-  el.innerHTML = `<h1>${t("profile")}</h1><div class="sub">Поделим</div>${skeletons(3, 70)}`;
-  let prof = null;
+  el.innerHTML = `<h1>${t("profile")}</h1>${skeletons(4, 70)}`;
+  let prof = null, friends = [];
   try { prof = await api("/api/me"); } catch (e) {}
+  try { friends = await api("/api/friends"); } catch (e) {}
+
+  const friendRows = friends.map((f) => `
+    <div class="friend-row">
+      <div class="friend-ava">${esc((f.name || "?").charAt(0).toUpperCase())}</div>
+      <div class="friend-name">${esc(f.name)}
+        ${f.username ? `<div class="friend-badge">@${esc(f.username)}</div>` : ""}
+      </div>
+      ${f.invited_by_me ? `<span class="chip closed">${t("invited_you")}</span>` : ""}
+    </div>`).join("");
 
   const initial = esc((me.first_name || "?").charAt(0).toUpperCase());
   const photo = me.photo_url ? `style="background-image:url('${esc(me.photo_url)}')"` : "";
@@ -907,6 +1083,16 @@ async function renderProfile() {
       <div class="stat-cell"><div class="v money">${prof ? prof.bills_count : "—"}</div><div class="t">${t("stat_bills")}</div></div>
       <div class="stat-cell"><div class="v money">${prof ? fmt(prof.total_spent) : "—"}</div><div class="t">${t("stat_spent")}</div></div>
     </div>
+    <div class="stat-grid stagger" style="margin-top:10px">
+      <div class="stat-cell"><div class="v money">${prof ? prof.friends_count : friends.length}</div><div class="t">${t("stat_friends")}</div></div>
+      <div class="stat-cell"><div class="v money">${prof ? prof.invited_count : "—"}</div><div class="t">${t("stat_invited")}</div></div>
+    </div>
+
+    <div class="section-title">${t("friends")}</div>
+    <button class="btn" id="inviteFriendBtn">${t("invite_friend")}</button>
+    <div class="card" style="margin-top:10px">
+      ${friendRows || `<div class="empty" style="padding:16px"><div class="t">${t("no_friends")}</div></div>`}
+    </div>
 
     <div class="section-title">${t("lang")}</div>
     <div class="lang-row">
@@ -920,6 +1106,7 @@ async function renderProfile() {
     </div>
   `;
 
+  el.querySelector("#inviteFriendBtn").addEventListener("click", shareReferral);
   el.querySelectorAll(".lang-pill").forEach((p) =>
     p.addEventListener("click", async () => {
       haptic();
@@ -960,29 +1147,40 @@ function renderBillView(el, bill) {
   const myP = bill.participants.find((p) => p.user_id === me.id);
   const myConfirmed = !!(myP && myP.confirmed);
 
+  const guests = bill.participants.filter((p) => p.is_guest);
+  const hasGuests = guests.length > 0;
+
   const rows = bill.items.map((item) => {
     const myShare = item.shares.find((s) => s.user_id === me.id);
     const chips = item.shares.map((s) => {
       const p = bill.participants.find((x) => x.user_id === s.user_id);
       const nm = p ? (p.name || s.user_id) : s.user_id;
-      return `<span class="avatar-chip ${s.user_id === me.id ? "me" : ""}">${esc(nm)}</span>`;
+      const g = p && p.is_guest ? "👤 " : "";
+      return `<span class="avatar-chip ${s.user_id === me.id ? "me" : ""}">${g}${esc(nm)}</span>`;
     }).join("");
+    const guestBtn = hasGuests && isOpen
+      ? `<span class="avatar-chip guest-assign" data-gitem="${item.id}" style="cursor:pointer;border:1.5px dashed color-mix(in srgb, var(--hint) 45%, transparent);background:transparent">👤＋</span>`
+      : "";
     return `
       <div class="item-row">
         <div class="checkbox ${myShare ? "on" : ""}" data-check="${item.id}" data-on="${!!myShare}">${checkSvg}</div>
         <div class="item-body" data-claim="${item.id}" data-on="${!!myShare}">
           <div class="item-name">${esc(item.name)}</div>
           <div class="item-price money">${fmt(item.total_price, bill.currency)}${item.qty > 1 ? " · " + item.qty : ""}</div>
-          <div class="avatars">${chips}</div>
+          <div class="avatars">${chips}${guestBtn}</div>
         </div>
         ${isCreator && isOpen ? `<button class="del-item" data-edit="${item.id}">✎</button>` : ""}
       </div>`;
   }).join("");
 
-  // Участники и их статус подтверждения
+  // Участники и их статус подтверждения (гости не подтверждают — у них нет Telegram)
   const partChips = bill.participants.map((p) => `
-    <span class="avatar-chip ${p.user_id === me.id ? "me" : ""}">${p.confirmed ? "✓ " : ""}${esc(p.name || p.user_id)}</span>`).join("");
-  const allConfirmed = bill.participants.length > 0 && bill.participants.every((p) => p.confirmed);
+    <span class="avatar-chip ${p.user_id === me.id ? "me" : ""}">${p.is_guest ? "👤 " : (p.confirmed ? "✓ " : "")}${esc(p.name || p.user_id)}</span>`).join("");
+  const addPartChip = isOpen
+    ? `<span class="avatar-chip" id="addPartChip" style="cursor:pointer;border:1.5px dashed color-mix(in srgb, var(--hint) 45%, transparent);background:transparent">＋ ${t("add_participant")}</span>`
+    : "";
+  const realParts = bill.participants.filter((p) => !p.is_guest);
+  const allConfirmed = realParts.length > 0 && realParts.every((p) => p.confirmed);
 
   el.innerHTML = `
     <button class="back-btn" id="backBtn">‹ ${t("bill_back")}</button>
@@ -1006,7 +1204,7 @@ function renderBillView(el, bill) {
     ${isOpen ? `
     <div class="card">
       <div style="font-size:12.5px;color:var(--hint);line-height:1.45;margin-bottom:9px">🔒 ${t("confirm_hint")}</div>
-      <div class="avatars" style="margin-bottom:10px">${partChips}</div>
+      <div class="avatars" style="margin-bottom:10px">${partChips}${addPartChip}</div>
       ${allConfirmed ? `<div style="font-size:13px;color:var(--green);font-weight:600;margin-bottom:8px">${t("all_confirmed")}</div>` : ""}
       <button class="btn ${myConfirmed ? "ghost" : ""} small" id="confirmBtn" style="width:100%">
         ${myConfirmed ? "✓ " + t("confirmed_you") + " · " + t("change_choice") : "✅ " + t("confirm_choice")}
@@ -1132,6 +1330,93 @@ function renderBillView(el, bill) {
     } catch (e) { toast(t("error") + ": " + e.message); }
   });
 
+  // Добавить участника: из друзей или гостя без Telegram
+  const addPart = el.querySelector("#addPartChip");
+  if (addPart) addPart.addEventListener("click", async () => {
+    haptic();
+    let friends = [];
+    try { friends = await api("/api/friends"); } catch (e) {}
+    const inBill = new Set(bill.participants.map((p) => p.user_id));
+    const candidates = friends.filter((f) => !inBill.has(f.user_id));
+    const friendRows = candidates.map((f) => `
+      <div class="friend-row pressable" data-add-friend="${f.user_id}" style="cursor:pointer">
+        <div class="friend-ava">${esc((f.name || "?").charAt(0).toUpperCase())}</div>
+        <div class="friend-name">${esc(f.name)}</div>
+        <span style="color:var(--accent);font-weight:700;font-size:18px">＋</span>
+      </div>`).join("");
+    openSheet(`
+      <div class="sheet-title">${t("add_participant")}</div>
+      <div class="section-title" style="margin-top:0">${t("from_friends")}</div>
+      ${friendRows || `<div class="empty" style="padding:10px"><div class="t">${friends.length ? t("all_in_bill") : t("no_friends")}</div></div>`}
+      <div class="section-title">${t("or_guest")}</div>
+      <div class="field"><label>${t("guest_name")}</label><input id="guestName" maxlength="40"></div>
+      <button class="btn ghost" id="guestAddBtn">👤 ${t("add_guest")}</button>
+    `);
+    document.querySelectorAll("[data-add-friend]").forEach((row) =>
+      row.addEventListener("click", async () => {
+        haptic("medium");
+        try {
+          await apiJson(`/api/bills/${bill.id}/participants`, "POST", { user_id: Number(row.dataset.addFriend) });
+          closeSheet();
+          toast(t("friend_added"));
+          await refresh();
+        } catch (e) { toast(t("error") + ": " + e.message); }
+      }));
+    document.getElementById("guestAddBtn").addEventListener("click", async () => {
+      const name = document.getElementById("guestName").value.trim();
+      if (!name) return;
+      haptic("medium");
+      try {
+        await apiJson(`/api/bills/${bill.id}/guests`, "POST", { name });
+        closeSheet();
+        toast(t("added"));
+        await refresh();
+      } catch (e) { toast(t("error") + ": " + e.message); }
+    });
+  });
+
+  // Отметить позицию за гостя (у гостя нет Telegram — отмечает компания)
+  el.querySelectorAll(".guest-assign").forEach((chip) =>
+    chip.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      haptic();
+      const item = bill.items.find((i) => i.id === Number(chip.dataset.gitem));
+      if (!item) return;
+      const rows3 = guests.map((g) => {
+        const has = item.shares.some((s) => s.user_id === g.user_id);
+        return `
+        <div class="friend-row pressable" data-toggle-guest="${g.user_id}" style="cursor:pointer">
+          <div class="friend-ava">👤</div>
+          <div class="friend-name">${esc(g.name)}</div>
+          <div class="checkbox ${has ? "on" : ""}">${checkSvg}</div>
+        </div>`;
+      }).join("");
+      openSheet(`
+        <div class="sheet-title">${t("pick_who")}</div>
+        <div style="font-size:13px;color:var(--hint);margin:-6px 0 10px">${esc(item.name)} · <span class="money">${fmt(item.total_price, bill.currency)}</span></div>
+        ${rows3}
+      `);
+      document.querySelectorAll("[data-toggle-guest]").forEach((row) =>
+        row.addEventListener("click", async () => {
+          haptic("medium");
+          const gid = Number(row.dataset.toggleGuest);
+          const has = item.shares.some((s) => s.user_id === gid);
+          try {
+            if (has) {
+              await api(`/api/bills/${bill.id}/claims/${item.id}?for_user_id=${gid}`, { method: "DELETE" });
+            } else {
+              const form = new FormData();
+              form.append("item_id", item.id);
+              form.append("weight", "1");
+              form.append("for_user_id", gid);
+              await api(`/api/bills/${bill.id}/claims`, { method: "POST", body: form });
+            }
+            closeSheet();
+            await refresh();
+          } catch (e) { toast(t("error") + ": " + e.message); }
+        }));
+    }));
+
   // Пригласить
   el.querySelector("#inviteBtn").addEventListener("click", () => {
     haptic();
@@ -1218,6 +1503,124 @@ sheet.addEventListener("pointerup", endDrag);
 sheet.addEventListener("pointercancel", endDrag);
 
 /* ============================================================
+   Онбординг: язык → номер телефона → 3 слайда о сервисе
+   ============================================================ */
+const ONB_KEY = "podelim_onboarded_v1";
+
+function startApp() {
+  if (currentBillId) {
+    showTab("splits");
+    openBill(currentBillId);
+  } else {
+    showTab("home");
+  }
+}
+
+function finishOnboarding() {
+  localStorage.setItem(ONB_KEY, "1");
+  localStorage.setItem("podelim_lang", LANG);
+  const ob = document.getElementById("onboarding");
+  if (ob) {
+    ob.style.transition = "opacity 240ms ease";
+    ob.style.opacity = "0";
+    setTimeout(() => ob.remove(), 250);
+  }
+  try { apiJson("/api/me/lang", "POST", { lang: LANG }); } catch (e) {}
+  startApp();
+}
+
+const SLIDES = [
+  { emoji: "🧾", tk: "sl1_t", dk: "sl1_d" },
+  { emoji: "🤝", tk: "sl2_t", dk: "sl2_d" },
+  { emoji: "📊", tk: "sl3_t", dk: "sl3_d" },
+];
+
+function renderOnboarding(step) {
+  let ob = document.getElementById("onboarding");
+  if (!ob) {
+    ob = document.createElement("div");
+    ob.id = "onboarding";
+    document.body.appendChild(ob);
+  }
+
+  // Шаг 0 — приветствие + выбор языка
+  if (step === 0) {
+    ob.innerHTML = `
+      <div class="onb-body">
+        <div class="onb-emoji">🧾</div>
+        <div class="onb-title">${t("onb1_title")}</div>
+        <div class="onb-desc">${t("onb1_sub")}</div>
+        <div class="section-title" style="text-align:center;margin-top:0">${t("choose_lang")}</div>
+        <div class="onb-langs">
+          <div class="onb-lang ${LANG === "ru" ? "on" : ""}" data-lang="ru">🇷🇺 Русский</div>
+          <div class="onb-lang ${LANG === "uz" ? "on" : ""}" data-lang="uz">🇺🇿 O'zbekcha</div>
+          <div class="onb-lang ${LANG === "en" ? "on" : ""}" data-lang="en">🇬🇧 English</div>
+        </div>
+        <button class="btn" id="onbNext0">${t("continue_btn")}</button>
+      </div>`;
+    ob.querySelectorAll(".onb-lang").forEach((p) =>
+      p.addEventListener("click", () => {
+        haptic();
+        LANG = p.dataset.lang;
+        localStorage.setItem("podelim_lang", LANG);
+        applyTabLabels();
+        renderOnboarding(0);
+      }));
+    ob.querySelector("#onbNext0").addEventListener("click", () => { haptic(); renderOnboarding(1); });
+    return;
+  }
+
+  // Шаг 1 — номер телефона (регистрация)
+  if (step === 1) {
+    ob.innerHTML = `
+      <div class="onb-body">
+        <div class="onb-emoji">📱</div>
+        <div class="onb-title">${t("onb_phone_t")}</div>
+        <div class="onb-desc">${t("onb_phone_d")}</div>
+        <button class="btn" id="onbPhoneBtn">${t("onb_phone_btn")}</button>
+        <button class="onb-later" id="onbLater">${t("later")}</button>
+      </div>`;
+    // Если номер уже есть в базе (регистрировался через бота) — шаг пропускается
+    api("/api/me").then((p) => {
+      if (p && p.phone) renderOnboarding(2);
+    }).catch(() => {});
+    ob.querySelector("#onbPhoneBtn").addEventListener("click", () => {
+      haptic("medium");
+      if (tg.requestContact) {
+        tg.requestContact((shared) => {
+          if (shared) {
+            toast(t("phone_done"));
+            renderOnboarding(2);
+          }
+        });
+      } else {
+        // Старый клиент Telegram без requestContact — номер попросит бот
+        renderOnboarding(2);
+      }
+    });
+    ob.querySelector("#onbLater").addEventListener("click", () => { haptic(); renderOnboarding(2); });
+    return;
+  }
+
+  // Шаги 2–4 — слайды о сервисе (можно пропустить)
+  const i = step - 2;
+  if (i >= SLIDES.length) { finishOnboarding(); return; }
+  const s = SLIDES[i];
+  const dots = SLIDES.map((_, n) => `<div class="onb-dot ${n === i ? "on" : ""}"></div>`).join("");
+  ob.innerHTML = `
+    <button class="onb-skip" id="onbSkip">${t("skip")}</button>
+    <div class="onb-body">
+      <div class="onb-emoji">${s.emoji}</div>
+      <div class="onb-title">${t(s.tk)}</div>
+      <div class="onb-desc">${t(s.dk)}</div>
+      <div class="onb-dots">${dots}</div>
+      <button class="btn" id="onbNext">${i === SLIDES.length - 1 ? t("lets_go") : t("next")}</button>
+    </div>`;
+  ob.querySelector("#onbSkip").addEventListener("click", () => { haptic(); finishOnboarding(); });
+  ob.querySelector("#onbNext").addEventListener("click", () => { haptic(); renderOnboarding(step + 1); });
+}
+
+/* ============================================================
    Точка входа
    ============================================================ */
 (function init() {
@@ -1228,12 +1631,24 @@ sheet.addEventListener("pointercancel", endDrag);
     document.getElementById("tabbar").style.display = "none";
     return;
   }
-  if (currentBillId) {
-    showTab("splits");
-    openBill(currentBillId);
-  } else {
-    showTab("home");
+
+  // Реферальная ссылка: t.me/<бот>?startapp=ref_<id> — это не счёт
+  if (currentBillId && String(currentBillId).startsWith("ref_")) {
+    const refId = Number(String(currentBillId).slice(4));
+    currentBillId = null;
+    if (refId) {
+      apiJson("/api/friends/referral", "POST", { ref_id: refId })
+        .then((r) => { if (r && r.ok && r.friend) toast("🤝 " + r.friend); })
+        .catch(() => {});
+    }
   }
+
+  // Первый запуск — онбординг: язык → телефон → слайды
+  if (!localStorage.getItem(ONB_KEY)) {
+    renderOnboarding(0);
+    return;
+  }
+  startApp();
 })();
 </script>
 </body>
