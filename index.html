@@ -2,248 +2,1237 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Поделим</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #111);
-  }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .muted { color: var(--tg-theme-hint-color, #888); font-size: 13px; margin-bottom: 16px; }
-  .card {
-    background: var(--tg-theme-secondary-bg-color, #f3f3f3); border-radius: 14px;
-    padding: 14px; margin-bottom: 12px;
-  }
-  .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,.15); }
-  .item-row:last-child { border-bottom: none; }
-  .item-name { font-weight: 600; }
-  .item-price { font-variant-numeric: tabular-nums; }
-  .avatars { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
-  .avatar-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(128,128,128,.2); }
-  .avatar-chip.me { background: var(--tg-theme-button-color, #2ea6ff); color: var(--tg-theme-button-text-color, #fff); }
-  button {
-    width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600;
-    background: var(--tg-theme-button-color, #2ea6ff); color: var(--tg-theme-button-text-color, #fff);
-    margin-top: 8px; cursor: pointer;
-  }
-  button.secondary { background: transparent; border: 1px solid rgba(128,128,128,.4); color: inherit; }
-  button:disabled { opacity: .5; }
-  input[type=file] { display: none; }
-  .upload-box {
-    border: 2px dashed rgba(128,128,128,.4); border-radius: 14px; padding: 32px 16px;
-    text-align: center; cursor: pointer;
-  }
-  .total-row { display: flex; justify-content: space-between; font-size: 17px; font-weight: 700; margin-top: 10px; }
-  .split-row { display: flex; justify-content: space-between; padding: 8px 0; }
-  .warn { color: #e0a000; font-size: 13px; margin-top: 6px; }
-  .error-card {
-    display: flex; gap: 10px; align-items: flex-start;
-    background: rgba(224,64,64,.08); border: 1px solid rgba(224,64,64,.25);
-    border-radius: 14px; padding: 14px; margin-top: 10px;
-    font-size: 14px; line-height: 1.4; color: inherit;
-  }
-  .error-card .error-icon { font-size: 18px; flex-shrink: 0; }
-  .item-select { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-  .checkbox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(128,128,128,.5); flex-shrink: 0; }
-  .checkbox.checked { background: var(--tg-theme-button-color, #2ea6ff); border-color: var(--tg-theme-button-color, #2ea6ff); }
-  #loading { text-align: center; padding: 40px 0; }
+/* ============================================================
+   Дизайн-система. Принципы: анимации < 300ms, только
+   transform/opacity, сильные кастомные easing-кривые,
+   scale(0.97) на нажатии, stagger для списков.
+   ============================================================ */
+:root {
+  color-scheme: light dark;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --bg: var(--tg-theme-bg-color, #f6f7f9);
+  --card: var(--tg-theme-secondary-bg-color, #ffffff);
+  --text: var(--tg-theme-text-color, #16181c);
+  --hint: var(--tg-theme-hint-color, #8b909a);
+  --accent: var(--tg-theme-button-color, #34c48e);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --green: #34c48e;
+  --red: #f0655a;
+  --amber: #e8a13c;
+  --line: color-mix(in srgb, var(--hint) 18%, transparent);
+
+  --r-lg: 20px;
+  --r-md: 14px;
+  --r-sm: 10px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.money { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* ---------- Каркас ---------- */
+#pages {
+  padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.page { display: none; }
+.page.active { display: block; animation: page-in 200ms var(--ease-out); }
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+h1 { font-size: 22px; font-weight: 700; margin: 4px 0 2px; letter-spacing: -0.02em; }
+.sub { color: var(--hint); font-size: 13px; margin-bottom: 16px; }
+
+.section-title {
+  font-size: 13px; font-weight: 600; color: var(--hint);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 20px 0 8px; padding: 0 2px;
+}
+
+/* ---------- Карточки ---------- */
+.card {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.pressable {
+  transition: transform 160ms var(--ease-out);
+  cursor: pointer;
+  user-select: none;
+}
+.pressable:active { transform: scale(0.97); }
+
+/* Stagger для появляющихся списков (декоративно, не блокирует) */
+.stagger > * {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: item-in 240ms var(--ease-out) forwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(n+6) { animation-delay: 200ms; }
+
+@keyframes item-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Главный экран ---------- */
+.hero {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #1d976c));
+  color: #fff;
+  border-radius: var(--r-lg);
+  padding: 18px 16px 14px;
+  margin-bottom: 12px;
+}
+.hero .label { font-size: 13px; opacity: 0.85; }
+.hero .big { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0 0; }
+.hero .meta { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+
+.seg {
+  display: flex; gap: 2px; margin-top: 14px;
+  background: rgba(255,255,255,0.16);
+  border-radius: 999px; padding: 3px;
+  position: relative;
+}
+.seg button {
+  flex: 1; border: 0; background: transparent; color: #fff;
+  font-size: 12px; font-weight: 600; padding: 7px 0;
+  border-radius: 999px; cursor: pointer;
+  transition: background 180ms ease, transform 160ms var(--ease-out);
+}
+.seg button:active { transform: scale(0.95); }
+.seg button.on { background: rgba(255,255,255,0.92); color: #1a7a56; }
+
+.debt-row { display: flex; gap: 10px; }
+.debt-card {
+  flex: 1; background: var(--card); border-radius: var(--r-lg);
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.debt-card .t { font-size: 12px; color: var(--hint); font-weight: 600; }
+.debt-card .v { font-size: 19px; font-weight: 800; margin-top: 4px; letter-spacing: -0.02em; }
+.debt-card .v.pos { color: var(--green); }
+.debt-card .v.neg { color: var(--red); }
+
+.debt-list-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.debt-list-row:last-child { border-bottom: none; }
+
+/* ---------- Списки счетов ---------- */
+.bill-card {
+  display: flex; align-items: center; gap: 12px;
+}
+.bill-icon {
+  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-size: 20px;
+}
+.bill-info { flex: 1; min-width: 0; }
+.bill-title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bill-meta { font-size: 12px; color: var(--hint); margin-top: 2px; }
+.bill-right { text-align: right; flex-shrink: 0; }
+.bill-sum { font-weight: 700; font-size: 15px; }
+.chip {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px; margin-top: 3px;
+  background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber);
+}
+.chip.closed { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
+
+/* ---------- Кнопки ---------- */
+.btn {
+  width: 100%; padding: 15px; border-radius: var(--r-md); border: none;
+  font-size: 16px; font-weight: 700; font-family: inherit;
+  background: var(--accent); color: var(--accent-text);
+  cursor: pointer; margin-top: 8px;
+  transition: transform 160ms var(--ease-out), opacity 160ms ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; }
+.btn.ghost {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.btn.danger { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+.btn.small { width: auto; padding: 9px 14px; font-size: 13px; margin: 0; border-radius: var(--r-sm); }
+
+/* ---------- Сканер ---------- */
+.upload-zone {
+  border: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-radius: var(--r-lg); padding: 44px 20px; text-align: center;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out), background 200ms ease;
+}
+.upload-zone:active { transform: scale(0.98); }
+.upload-zone .ico { font-size: 44px; }
+.upload-zone .t1 { font-weight: 700; margin-top: 10px; font-size: 16px; }
+.upload-zone .t2 { color: var(--hint); font-size: 13px; margin-top: 4px; }
+input[type=file] { display: none; }
+
+.scanning {
+  text-align: center; padding: 42px 20px;
+}
+.scan-frame {
+  width: 120px; height: 150px; margin: 0 auto 18px;
+  border-radius: var(--r-md); position: relative; overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.scan-line {
+  position: absolute; left: 8px; right: 8px; height: 2px; border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  animation: scan 1.3s var(--ease-in-out) infinite alternate;
+}
+@keyframes scan {
+  from { transform: translateY(10px); }
+  to   { transform: translateY(136px); }
+}
+
+.step-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: 14px; color: var(--hint); }
+.step-row.done { color: var(--text); }
+.step-dot {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--line);
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+}
+.step-row.done .step-dot { border-color: var(--green); background: var(--green); color: #fff; }
+
+/* ---------- Позиции чека ---------- */
+.item-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 0; border-bottom: 1px solid var(--line);
+}
+.item-row:last-child { border-bottom: none; }
+.checkbox {
+  width: 23px; height: 23px; border-radius: 7px; flex-shrink: 0; margin-top: 1px;
+  border: 2px solid color-mix(in srgb, var(--hint) 45%, transparent);
+  transition: background 150ms ease, border-color 150ms ease, transform 160ms var(--ease-out);
+  display: flex; align-items: center; justify-content: center;
+}
+.item-row:active .checkbox { transform: scale(0.9); }
+.checkbox.on { background: var(--accent); border-color: var(--accent); }
+.checkbox svg { opacity: 0; transform: scale(0.6); transition: opacity 150ms ease, transform 180ms var(--ease-out); }
+.checkbox.on svg { opacity: 1; transform: scale(1); }
+.item-body { flex: 1; min-width: 0; cursor: pointer; }
+.item-name { font-weight: 600; font-size: 14.5px; }
+.item-price { font-size: 12.5px; color: var(--hint); margin-top: 1px; }
+.avatars { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.avatar-chip {
+  font-size: 11px; padding: 2.5px 9px; border-radius: 999px;
+  background: color-mix(in srgb, var(--hint) 16%, transparent);
+}
+.avatar-chip.me { background: var(--accent); color: var(--accent-text); }
+.del-item {
+  border: none; background: none; color: var(--hint); font-size: 17px;
+  cursor: pointer; padding: 2px 4px; flex-shrink: 0;
+  transition: transform 160ms var(--ease-out), color 150ms ease;
+}
+.del-item:active { transform: scale(0.85); color: var(--red); }
+
+.total-row {
+  display: flex; justify-content: space-between;
+  font-size: 17px; font-weight: 800; padding-top: 4px;
+}
+.split-row { display: flex; justify-content: space-between; padding: 9px 0; font-size: 14.5px; border-bottom: 1px solid var(--line); }
+.split-row:last-child { border-bottom: none; }
+.warn { color: var(--amber); font-size: 13px; margin-top: 8px; line-height: 1.4; }
+
+/* ---------- Профиль ---------- */
+.profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.avatar-big {
+  width: 62px; height: 62px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), #1d976c);
+  color: #fff; font-size: 26px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  background-size: cover; background-position: center;
+}
+.stat-grid { display: flex; gap: 10px; }
+.stat-cell { flex: 1; text-align: center; padding: 14px 6px; background: var(--card); border-radius: var(--r-md); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.stat-cell .v { font-size: 18px; font-weight: 800; }
+.stat-cell .t { font-size: 11.5px; color: var(--hint); margin-top: 2px; }
+
+.lang-row { display: flex; gap: 8px; }
+.lang-pill {
+  flex: 1; padding: 11px 0; text-align: center; border-radius: var(--r-md);
+  background: var(--card); font-weight: 600; font-size: 14px; cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: border-color 150ms ease, color 150ms ease, transform 160ms var(--ease-out);
+}
+.lang-pill:active { transform: scale(0.96); }
+.lang-pill.on { border-color: var(--accent); color: var(--accent); }
+
+.prof-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14.5px;
+}
+.prof-row:last-child { border-bottom: none; }
+.prof-row .k { color: var(--hint); }
+
+/* ---------- Нижняя навигация ---------- */
+#tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#tabbar .inner { display: flex; max-width: 520px; margin: 0 auto; }
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 0 7px; border: none; background: none; cursor: pointer;
+  color: var(--hint); font-size: 10.5px; font-weight: 600; font-family: inherit;
+  transition: color 150ms ease, transform 160ms var(--ease-out);
+}
+.tab:active { transform: scale(0.92); }
+.tab.on { color: var(--accent); }
+.tab svg { width: 23px; height: 23px; }
+
+/* ---------- Шторка (bottom sheet) ---------- */
+#sheet-backdrop {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(0,0,0,0.4);
+  opacity: 0; pointer-events: none;
+  transition: opacity 250ms ease;
+}
+#sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+#sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
+  background: var(--card);
+  border-radius: 22px 22px 0 0;
+  padding: 8px 18px calc(20px + env(safe-area-inset-bottom));
+  max-width: 520px; margin: 0 auto;
+  transform: translateY(100%);
+  transition: transform 400ms var(--ease-drawer);
+  max-height: 88vh; overflow-y: auto;
+}
+#sheet.open { transform: translateY(0); }
+#sheet.dragging { transition: none; }
+.sheet-grip {
+  width: 38px; height: 4.5px; border-radius: 3px;
+  background: color-mix(in srgb, var(--hint) 35%, transparent);
+  margin: 6px auto 14px;
+}
+.sheet-title { font-size: 18px; font-weight: 700; margin-bottom: 14px; letter-spacing: -0.01em; }
+
+.field { margin-bottom: 10px; }
+.field label { display: block; font-size: 12.5px; color: var(--hint); font-weight: 600; margin-bottom: 5px; }
+.field input {
+  width: 100%; padding: 13px 14px; border-radius: var(--r-md);
+  border: 1.5px solid var(--line); background: var(--bg); color: var(--text);
+  font-size: 16px; font-family: inherit; outline: none;
+  transition: border-color 150ms ease;
+}
+.field input:focus { border-color: var(--accent); }
+.field-inline { display: flex; gap: 8px; }
+.field-inline .field { flex: 1; }
+
+/* ---------- Тост ---------- */
+#toast {
+  position: fixed; top: 12px; left: 50%; z-index: 200;
+  transform: translate(-50%, -160%);
+  background: var(--text); color: var(--bg);
+  padding: 11px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
+  transition: transform 300ms var(--ease-out);
+  max-width: 88vw; text-align: center;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+}
+#toast.show { transform: translate(-50%, 0); }
+
+/* ---------- Скелетоны ---------- */
+.skel {
+  border-radius: var(--r-lg); background: var(--card);
+  position: relative; overflow: hidden; margin-bottom: 10px;
+}
+.skel::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--hint) 8%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+.empty { text-align: center; padding: 36px 20px; color: var(--hint); }
+.empty .ico { font-size: 42px; margin-bottom: 8px; }
+.empty .t { font-size: 14px; line-height: 1.5; }
+
+.back-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: none; background: none; color: var(--accent);
+  font-size: 15px; font-weight: 600; font-family: inherit;
+  padding: 4px 0; margin-bottom: 8px; cursor: pointer;
+  transition: transform 160ms var(--ease-out);
+}
+.back-btn:active { transform: scale(0.95); }
+
+@media (prefers-reduced-motion: reduce) {
+  .page.active, .stagger > * { animation: none; opacity: 1; transform: none; }
+  .scan-line { animation-duration: 2.5s; }
+  #sheet { transition: opacity 200ms ease; }
+}
 </style>
 </head>
 <body>
 
-<div id="app">
-  <div id="loading">Загрузка…</div>
+<div id="pages">
+  <div class="page" id="page-home"></div>
+  <div class="page" id="page-splits"></div>
+  <div class="page" id="page-scan"></div>
+  <div class="page" id="page-profile"></div>
+  <div class="page" id="page-bill"></div>
 </div>
 
-<script>
-const tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+<nav id="tabbar">
+  <div class="inner">
+    <button class="tab" data-tab="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+      <span data-i18n="tab_home"></span>
+    </button>
+    <button class="tab" data-tab="splits">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.6-3.2 2.9-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.6c2.4.2 4.3 1.8 4.9 4.4"/></svg>
+      <span data-i18n="tab_splits"></span>
+    </button>
+    <button class="tab" data-tab="scan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+      <span data-i18n="tab_scan"></span>
+    </button>
+    <button class="tab" data-tab="profile">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5c.8-3.8 3.6-5.8 7-5.8s6.2 2 7 5.8"/></svg>
+      <span data-i18n="tab_profile"></span>
+    </button>
+  </div>
+</nav>
 
-// !!! ЗАМЕНИТЬ на реальный адрес backend после деплоя (см. README) !!!
+<div id="sheet-backdrop"></div>
+<div id="sheet"></div>
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   Конфигурация — поменять после деплоя (см. README)
+   ============================================================ */
 const API_BASE = "https://YOUR-BACKEND-DOMAIN.example.com";
+const BOT_USERNAME = "YOUR_BOT_USERNAME";
+
+/* ============================================================
+   Локализация: ru / uz / en
+   ============================================================ */
+const I18N = {
+  ru: {
+    tab_home: "Главная", tab_splits: "Траты", tab_scan: "Скан", tab_profile: "Профиль",
+    hello: "Привет", spent_label: "Потрачено",
+    p_day: "День", p_week: "Неделя", p_month: "Месяц", p_all: "Всё время",
+    bills_n: "счетов", they_owe: "Мне должны", i_owe: "Я должен",
+    recent: "Недавние траты", no_recent: "Пока нет трат за этот период",
+    debts_detail: "Детали долгов", nobody: "Никто ничего не должен 🎉",
+    my_splits: "Мои счета", new_split: "Новая трата",
+    no_splits: "Здесь появятся ваши общие счета.\nСоздайте первый — вручную или по фото чека!",
+    participants_n: "участн.", my_share: "моя доля",
+    status_open: "делим", status_closed: "закрыт",
+    scan_title: "Скан чека", scan_sub: "Сфотографируйте чек — разложим по позициям автоматически",
+    scan_tap: "Нажмите, чтобы снять чек", scan_or: "или выберите фото из галереи",
+    scanning: "Распознаём чек…", scan_step1: "Фото загружено", scan_step2: "Читаем позиции",
+    scan_step3: "Считаем суммы", scan_fail: "Не получилось распознать чек. Попробуйте фото почётче.",
+    scan_tip: "Совет: снимайте чек целиком, при хорошем свете, без бликов.",
+    profile: "Профиль", phone: "Телефон", username: "Ник", lang: "Язык",
+    stat_bills: "счетов", stat_spent: "потрачено всего",
+    about: "Поделим — делите счета честно. Один платит, потом каждый видит свою точную долю.",
+    bill_back: "Назад", bill_hint: "Отметьте, что заказывали вы. Если блюдо общее — пусть каждый, кто его ел, тоже отметит его у себя.",
+    total: "Итого", add_item: "Добавить позицию", item_name: "Название", item_price: "Сумма", item_qty: "Кол-во",
+    add: "Добавить", invite: "Пригласить участников", calc: "Кто сколько должен",
+    calc_note: "Неотмеченные позиции поделены поровну между всеми участниками.",
+    edit_item: "Изменить позицию", save: "Сохранить", delete_item: "Удалить позицию",
+    rename: "Переименовать", confirm_choice: "Подтвердить мой выбор",
+    confirmed_you: "Выбор подтверждён", change_choice: "Изменить выбор",
+    confirm_hint: "Когда всё отметили — подтвердите выбор. Если создатель изменит позиции, подтверждения сбросятся и нужно будет проверить заново.",
+    all_confirmed: "Все участники подтвердили выбор ✅",
+    close_bill: "Закрыть счёт — все рассчитались", closed_ok: "Счёт закрыт ✅",
+    new_split_title: "Новая трата", split_name: "Название (кафе, поездка…)",
+    split_name_ph: "Например: Ужин в Plov Center", create: "Создать", creating: "Создаём…",
+    invite_text: "Скинь свою долю по чеку 👇",
+    added: "Добавлено ✅", saved: "Сохранено ✅", error: "Ошибка", removed: "Удалено",
+    open_via_tg: "Откройте приложение через Telegram-бота — напрямую в браузере оно не работает.",
+    loading: "Загрузка…", bill_not_found: "Счёт не найден или устарел.",
+    currency_uzs: "сум",
+  },
+  uz: {
+    tab_home: "Asosiy", tab_splits: "Xarajatlar", tab_scan: "Skan", tab_profile: "Profil",
+    hello: "Salom", spent_label: "Sarflandi",
+    p_day: "Kun", p_week: "Hafta", p_month: "Oy", p_all: "Hammasi",
+    bills_n: "ta chek", they_owe: "Menga qarz", i_owe: "Mening qarzim",
+    recent: "So'nggi xarajatlar", no_recent: "Bu davrda xarajatlar yo'q",
+    debts_detail: "Qarzlar tafsiloti", nobody: "Hech kim hech narsa qarz emas 🎉",
+    my_splits: "Mening cheklarim", new_split: "Yangi xarajat",
+    no_splits: "Bu yerda umumiy cheklaringiz ko'rinadi.\nBirinchisini yarating — qo'lda yoki chek surati orqali!",
+    participants_n: "ishtirokchi", my_share: "mening ulushim",
+    status_open: "bo'linmoqda", status_closed: "yopilgan",
+    scan_title: "Chekni skanerlash", scan_sub: "Chekni suratga oling — pozitsiyalarga o'zimiz ajratamiz",
+    scan_tap: "Chekni suratga olish uchun bosing", scan_or: "yoki galereyadan tanlang",
+    scanning: "Chek o'qilmoqda…", scan_step1: "Surat yuklandi", scan_step2: "Pozitsiyalar o'qilmoqda",
+    scan_step3: "Summalar hisoblanmoqda", scan_fail: "Chekni o'qib bo'lmadi. Aniqroq surat qiling.",
+    scan_tip: "Maslahat: chekni to'liq, yaxshi yorug'likda, aks-siz suratga oling.",
+    profile: "Profil", phone: "Telefon", username: "Nik", lang: "Til",
+    stat_bills: "ta chek", stat_spent: "jami sarflandi",
+    about: "Podelim — cheklarni adolatli bo'ling. Bittangiz to'laydi, keyin har kim o'z aniq ulushini ko'radi.",
+    bill_back: "Orqaga", bill_hint: "O'zingiz buyurtma qilganingizni belgilang. Taom umumiy bo'lsa — uni yegan har bir kishi belgilasin.",
+    total: "Jami", add_item: "Pozitsiya qo'shish", item_name: "Nomi", item_price: "Summa", item_qty: "Soni",
+    add: "Qo'shish", invite: "Ishtirokchilarni taklif qilish", calc: "Kim qancha to'laydi",
+    calc_note: "Belgilanmagan pozitsiyalar barcha ishtirokchilar o'rtasida teng bo'lindi.",
+    edit_item: "Pozitsiyani o'zgartirish", save: "Saqlash", delete_item: "Pozitsiyani o'chirish",
+    rename: "Nomini o'zgartirish", confirm_choice: "Tanlovimni tasdiqlash",
+    confirmed_you: "Tanlov tasdiqlandi", change_choice: "Tanlovni o'zgartirish",
+    confirm_hint: "Hammasini belgilagach — tanlovni tasdiqlang. Yaratuvchi pozitsiyalarni o'zgartirsa, tasdiqlar bekor bo'ladi va qayta tekshirish kerak.",
+    all_confirmed: "Barcha ishtirokchilar tanlovni tasdiqladi ✅",
+    close_bill: "Chekni yopish — hamma hisoblashdi", closed_ok: "Chek yopildi ✅",
+    new_split_title: "Yangi xarajat", split_name: "Nomi (kafe, safar…)",
+    split_name_ph: "Masalan: Plov Centerda kechki ovqat", create: "Yaratish", creating: "Yaratilmoqda…",
+    invite_text: "Chek bo'yicha ulushingni tashla 👇",
+    added: "Qo'shildi ✅", saved: "Saqlandi ✅", error: "Xatolik", removed: "O'chirildi",
+    open_via_tg: "Ilovani Telegram-bot orqali oching — brauzerda to'g'ridan-to'g'ri ishlamaydi.",
+    loading: "Yuklanmoqda…", bill_not_found: "Chek topilmadi yoki eskirgan.",
+    currency_uzs: "so'm",
+  },
+  en: {
+    tab_home: "Home", tab_splits: "Splits", tab_scan: "Scan", tab_profile: "Profile",
+    hello: "Hi", spent_label: "Spent",
+    p_day: "Day", p_week: "Week", p_month: "Month", p_all: "All time",
+    bills_n: "bills", they_owe: "Owed to me", i_owe: "I owe",
+    recent: "Recent expenses", no_recent: "No expenses in this period yet",
+    debts_detail: "Debt details", nobody: "Nobody owes anything 🎉",
+    my_splits: "My bills", new_split: "New expense",
+    no_splits: "Your shared bills will appear here.\nCreate the first one — manually or from a receipt photo!",
+    participants_n: "people", my_share: "my share",
+    status_open: "splitting", status_closed: "closed",
+    scan_title: "Scan receipt", scan_sub: "Take a photo of the receipt — we'll parse every item automatically",
+    scan_tap: "Tap to photograph a receipt", scan_or: "or pick one from the gallery",
+    scanning: "Reading the receipt…", scan_step1: "Photo uploaded", scan_step2: "Reading items",
+    scan_step3: "Calculating totals", scan_fail: "Couldn't read the receipt. Try a sharper photo.",
+    scan_tip: "Tip: capture the whole receipt in good light, avoid glare.",
+    profile: "Profile", phone: "Phone", username: "Username", lang: "Language",
+    stat_bills: "bills", stat_spent: "total spent",
+    about: "Podelim — split bills fairly. One pays, then everyone sees their exact share.",
+    bill_back: "Back", bill_hint: "Mark what you ordered. If a dish was shared — everyone who had it should mark it too.",
+    total: "Total", add_item: "Add item", item_name: "Name", item_price: "Amount", item_qty: "Qty",
+    add: "Add", invite: "Invite participants", calc: "Who owes what",
+    calc_note: "Unclaimed items were split equally between all participants.",
+    edit_item: "Edit item", save: "Save", delete_item: "Delete item",
+    rename: "Rename", confirm_choice: "Confirm my choice",
+    confirmed_you: "Choice confirmed", change_choice: "Change my choice",
+    confirm_hint: "Once you've marked everything — confirm your choice. If the creator edits the items, all confirmations reset and everyone re-checks.",
+    all_confirmed: "All participants confirmed ✅",
+    close_bill: "Close bill — everyone settled", closed_ok: "Bill closed ✅",
+    new_split_title: "New expense", split_name: "Name (café, trip…)",
+    split_name_ph: "E.g.: Dinner at Plov Center", create: "Create", creating: "Creating…",
+    invite_text: "Send your share of the bill 👇",
+    added: "Added ✅", saved: "Saved ✅", error: "Error", removed: "Removed",
+    open_via_tg: "Open this app via the Telegram bot — it doesn't work directly in a browser.",
+    loading: "Loading…", bill_not_found: "Bill not found or expired.",
+    currency_uzs: "UZS",
+  },
+};
+
+let LANG = localStorage.getItem("podelim_lang") || null;
+const t = (k) => (I18N[LANG] && I18N[LANG][k]) || I18N.ru[k] || k;
+
+function detectLang(tgUser) {
+  if (LANG) return LANG;
+  const code = ((tgUser && tgUser.language_code) || "ru").toLowerCase();
+  LANG = code.startsWith("uz") ? "uz" : code.startsWith("en") ? "en" : "ru";
+  return LANG;
+}
+
+/* ============================================================
+   Telegram + API
+   ============================================================ */
+const tg = window.Telegram.WebApp;
+tg.ready(); tg.expand();
+try { tg.setHeaderColor("secondary_bg_color"); } catch (e) {}
 
 const initData = tg.initData || "";
 const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
-
-let currentBillId = new URLSearchParams(window.location.search).get("startapp") ||
-  (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || null;
-
-const app = document.getElementById("app");
+detectLang(me);
 
 async function api(path, options = {}) {
   const res = await fetch(API_BASE + path, {
     ...options,
     headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
   });
-  if (!res.ok) {
-    // Backend всегда кладёт человекочитаемый текст в поле "detail" —
-    // показываем только его, без кода ответа и служебных подробностей.
-    let message = "Что-то пошло не так. Попробуй ещё раз.";
-    try {
-      const body = await res.json();
-      if (body && body.detail) message = body.detail;
-    } catch (_) {
-      // тело ответа не JSON — оставляем сообщение по умолчанию
-    }
-    const err = new Error(message);
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json();
 }
+const apiJson = (path, method, body) =>
+  api(path, { method, body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
-function fmt(n) {
-  return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+/* ============================================================
+   Утилиты
+   ============================================================ */
+function fmt(n, currency) {
+  const num = Number(n) || 0;
+  const isUZS = !currency || currency === "UZS";
+  const s = num.toLocaleString("ru-RU", { maximumFractionDigits: isUZS ? 0 : 2 });
+  const cur = isUZS ? t("currency_uzs") : currency;
+  return `${s} ${cur}`;
+}
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmtDate(iso) {
+  const d = new Date(iso), now = new Date();
+  const days = Math.floor((now - d) / 86400000);
+  if (days === 0) return d.toLocaleTimeString(LANG === "en" ? "en-GB" : "ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString(LANG === "en" ? "en-GB" : "ru-RU", { day: "numeric", month: "short" });
 }
 
-function errorCard(message) {
-  return `<div class="error-card"><span class="error-icon">⚠️</span><span>${message}</span></div>`;
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+function haptic(type = "light") {
+  try { tg.HapticFeedback.impactOccurred(type); } catch (e) {}
 }
 
-// ---------- Экран 1: создать счёт (нет активного billId) ----------
-function renderUpload() {
-  app.innerHTML = `
-    <h1>Поделим 🧾</h1>
-    <div class="muted">Сфоткай чек — разложим по позициям автоматически</div>
-    <label class="upload-box" for="photoInput">
-      <div style="font-size:32px;">📷</div>
-      <div>Нажми, чтобы сделать фото или выбрать из галереи</div>
+const checkSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L19.5 7"/></svg>`;
+const skeletons = (n = 3, h = 76) =>
+  Array.from({ length: n }, () => `<div class="skel" style="height:${h}px"></div>`).join("");
+
+/* ============================================================
+   Навигация по вкладкам
+   ============================================================ */
+let currentTab = "home";
+let currentBillId = new URLSearchParams(window.location.search).get("startapp") ||
+  (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || null;
+
+function applyTabLabels() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+}
+
+function showTab(tab, push = true) {
+  currentTab = tab;
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  document.getElementById("page-" + tab).classList.add("active");
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  window.scrollTo(0, 0);
+  if (tab === "home") renderHome();
+  if (tab === "splits") renderSplits();
+  if (tab === "scan") renderScan();
+  if (tab === "profile") renderProfile();
+}
+
+document.querySelectorAll(".tab").forEach((b) =>
+  b.addEventListener("click", () => { haptic(); showTab(b.dataset.tab); }));
+
+/* ============================================================
+   Страница 1 — Главная
+   ============================================================ */
+let period = "month";
+
+async function renderHome() {
+  const el = document.getElementById("page-home");
+  const name = esc(me.first_name || "");
+  el.innerHTML = `
+    <h1>${t("hello")}${name ? ", " + name : ""} 👋</h1>
+        <div class="skel" style="height:150px"></div>
+    <div class="skel" style="height:78px"></div>
+    ${skeletons(2)}
+  `;
+  try {
+    const [summary, debts] = await Promise.all([
+      api(`/api/me/summary?period=${period}`),
+      api(`/api/me/debts`),
+    ]);
+    renderHomeContent(el, summary, debts);
+  } catch (e) {
+    el.innerHTML = `<h1>${t("hello")} 👋</h1><div class="empty"><div class="ico">📡</div><div class="t">${esc(e.message)}</div></div>`;
+  }
+}
+
+function renderHomeContent(el, summary, debts) {
+  const name = esc(me.first_name || "");
+  const periods = [["day", "p_day"], ["week", "p_week"], ["month", "p_month"], ["all", "p_all"]];
+  const owedMe = Number(debts.total_owed_to_me);
+  const iOwe = Number(debts.total_i_owe);
+
+  const recent = (summary.bills || []).slice(0, 6).map((b) => `
+    <div class="card pressable bill-card" data-bill="${b.id}">
+      <div class="bill-icon">🧾</div>
+      <div class="bill-info">
+        <div class="bill-title">${esc(b.title)}</div>
+        <div class="bill-meta">${fmtDate(b.created_at)}</div>
+      </div>
+      <div class="bill-right"><div class="bill-sum money">${fmt(b.amount, b.currency)}</div></div>
+    </div>`).join("");
+
+  const debtRows = (list, sign, cls) => list.map((d) => `
+    <div class="debt-list-row">
+      <span>${esc(d.name)}</span>
+      <b class="money" style="color:var(--${cls})">${sign}${fmt(d.amount)}</b>
+    </div>`).join("");
+
+  el.innerHTML = `
+    <h1>${t("hello")}${name ? ", " + name : ""} 👋</h1>
+    
+    <div class="hero">
+      <div class="label">${t("spent_label")}</div>
+      <div class="big money">${fmt(summary.total)}</div>
+      <div class="meta">${summary.bills_count} ${t("bills_n")}</div>
+      <div class="seg">
+        ${periods.map(([p, k]) => `<button data-p="${p}" class="${p === period ? "on" : ""}">${t(k)}</button>`).join("")}
+      </div>
+    </div>
+
+    <div class="debt-row stagger">
+      <div class="debt-card pressable" id="owedMeCard">
+        <div class="t">${t("they_owe")}</div>
+        <div class="v pos money">+${fmt(owedMe)}</div>
+      </div>
+      <div class="debt-card pressable" id="iOweCard">
+        <div class="t">${t("i_owe")}</div>
+        <div class="v neg money">−${fmt(iOwe)}</div>
+      </div>
+    </div>
+
+    <div id="debtDetail" style="display:none" class="card">
+      <div class="section-title" style="margin:0 0 6px">${t("debts_detail")}</div>
+      ${(debts.they_owe_me.length || debts.i_owe.length)
+        ? debtRows(debts.they_owe_me, "+", "green") + debtRows(debts.i_owe, "−", "red")
+        : `<div class="empty" style="padding:14px"><div class="t">${t("nobody")}</div></div>`}
+    </div>
+
+    <div class="section-title">${t("recent")}</div>
+    <div class="stagger">
+      ${recent || `<div class="empty"><div class="ico">🌱</div><div class="t">${t("no_recent")}</div></div>`}
+    </div>
+  `;
+
+  el.querySelectorAll(".seg button").forEach((b) =>
+    b.addEventListener("click", () => { haptic(); period = b.dataset.p; renderHome(); }));
+  const toggleDebts = () => {
+    haptic();
+    const d = el.querySelector("#debtDetail");
+    d.style.display = d.style.display === "none" ? "block" : "none";
+  };
+  el.querySelector("#owedMeCard").addEventListener("click", toggleDebts);
+  el.querySelector("#iOweCard").addEventListener("click", toggleDebts);
+  el.querySelectorAll("[data-bill]").forEach((c) =>
+    c.addEventListener("click", () => openBill(c.dataset.bill)));
+}
+
+/* ============================================================
+   Страница 2 — Траты (мои счета)
+   ============================================================ */
+async function renderSplits() {
+  const el = document.getElementById("page-splits");
+  el.innerHTML = `<h1>${t("my_splits")}</h1><div class="sub">Поделим</div>${skeletons(4)}`;
+  try {
+    const bills = await api("/api/me/bills");
+    const cards = bills.map((b) => `
+      <div class="card pressable bill-card" data-bill="${b.id}">
+        <div class="bill-icon">${b.is_creator ? "👑" : "🧾"}</div>
+        <div class="bill-info">
+          <div class="bill-title">${esc(b.title)}</div>
+          <div class="bill-meta">${fmtDate(b.created_at)} · ${b.participants} ${t("participants_n")} · ${t("my_share")}: <span class="money">${fmt(b.my_share, b.currency)}</span></div>
+        </div>
+        <div class="bill-right">
+          <div class="bill-sum money">${fmt(b.total, b.currency)}</div>
+          <span class="chip ${b.status === "closed" ? "closed" : ""}">${b.status === "closed" ? t("status_closed") : t("status_open")}</span>
+        </div>
+      </div>`).join("");
+
+    el.innerHTML = `
+      <h1>${t("my_splits")}</h1>
+            <button class="btn" id="newSplitBtn">＋ ${t("new_split")}</button>
+      <div style="height:14px"></div>
+      <div class="stagger">
+        ${cards || `<div class="empty"><div class="ico">🧾</div><div class="t">${t("no_splits").replace(/\n/g, "<br>")}</div></div>`}
+      </div>
+    `;
+    el.querySelector("#newSplitBtn").addEventListener("click", openNewSplitSheet);
+    el.querySelectorAll("[data-bill]").forEach((c) =>
+      c.addEventListener("click", () => openBill(c.dataset.bill)));
+  } catch (e) {
+    el.innerHTML = `<h1>${t("my_splits")}</h1><div class="empty"><div class="ico">📡</div><div class="t">${esc(e.message)}</div></div>`;
+  }
+}
+
+function openNewSplitSheet() {
+  haptic();
+  openSheet(`
+    <div class="sheet-title">${t("new_split_title")}</div>
+    <div class="field">
+      <label>${t("split_name")}</label>
+      <input id="splitName" placeholder="${t("split_name_ph")}" maxlength="60">
+    </div>
+    <button class="btn" id="createSplitBtn">${t("create")}</button>
+  `);
+  const btn = document.getElementById("createSplitBtn");
+  btn.addEventListener("click", async () => {
+    const name = document.getElementById("splitName").value.trim();
+    if (!name) return;
+    btn.disabled = true; btn.textContent = t("creating");
+    try {
+      const bill = await apiJson("/api/bills/manual", "POST", { title: name, currency: "UZS", items: [] });
+      closeSheet();
+      openBill(bill.id);
+    } catch (e) {
+      toast(t("error") + ": " + e.message);
+      btn.disabled = false; btn.textContent = t("create");
+    }
+  });
+  setTimeout(() => document.getElementById("splitName").focus(), 420);
+}
+
+/* ============================================================
+   Страница 3 — Скан чека
+   ============================================================ */
+function renderScan() {
+  const el = document.getElementById("page-scan");
+  el.innerHTML = `
+    <h1>${t("scan_title")}</h1>
+    <div class="sub">${t("scan_sub")}</div>
+    <label class="upload-zone" for="photoInput">
+      <div class="ico">📷</div>
+      <div class="t1">${t("scan_tap")}</div>
+      <div class="t2">${t("scan_or")}</div>
     </label>
     <input type="file" id="photoInput" accept="image/*" capture="environment">
-    <div id="uploadStatus" class="muted" style="margin-top:10px;"></div>
+    <div class="card" style="margin-top:14px">
+      <div style="font-size:13.5px;color:var(--hint);line-height:1.5">💡 ${t("scan_tip")}</div>
+    </div>
   `;
-  document.getElementById("photoInput").addEventListener("change", onPhotoSelected);
+  el.querySelector("#photoInput").addEventListener("change", onPhotoSelected);
 }
 
 async function onPhotoSelected(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const status = document.getElementById("uploadStatus");
-  status.textContent = "Распознаём чек, это займёт несколько секунд…";
+  haptic("medium");
+  const el = document.getElementById("page-scan");
+  el.innerHTML = `
+    <h1>${t("scan_title")}</h1>
+    <div class="scanning">
+      <div class="scan-frame"><div class="scan-line"></div></div>
+      <div style="font-weight:700;font-size:16px">${t("scanning")}</div>
+      <div style="max-width:240px;margin:16px auto 0;text-align:left">
+        <div class="step-row done"><div class="step-dot">✓</div>${t("scan_step1")}</div>
+        <div class="step-row" id="st2"><div class="step-dot"></div>${t("scan_step2")}</div>
+        <div class="step-row" id="st3"><div class="step-dot"></div>${t("scan_step3")}</div>
+      </div>
+    </div>
+  `;
+  const st2 = setTimeout(() => { const s = document.getElementById("st2"); if (s) { s.classList.add("done"); s.querySelector(".step-dot").textContent = "✓"; } }, 1800);
+  const st3 = setTimeout(() => { const s = document.getElementById("st3"); if (s) { s.classList.add("done"); s.querySelector(".step-dot").textContent = "✓"; } }, 3600);
 
   const form = new FormData();
   form.append("photo", file);
-
   try {
     const bill = await api("/api/bills", { method: "POST", body: form });
-    currentBillId = bill.id;
-    history.replaceState(null, "", `?startapp=${bill.id}`);
-    renderBill(bill);
+    clearTimeout(st2); clearTimeout(st3);
+    haptic("medium");
+    openBill(bill.id);
   } catch (err) {
-    status.className = "";
-    status.innerHTML = errorCard(err.message);
+    clearTimeout(st2); clearTimeout(st3);
+    renderScan();
+    toast(t("scan_fail"));
   }
 }
 
-// ---------- Экран 2: разбор позиций ----------
-async function loadAndRenderBill() {
-  try {
-    const bill = await api(`/api/bills/${currentBillId}`);
-    renderBill(bill);
-  } catch (err) {
-    app.innerHTML = errorCard("Счёт не найден или устарел.");
-  }
-}
+/* ============================================================
+   Страница 4 — Профиль
+   ============================================================ */
+async function renderProfile() {
+  const el = document.getElementById("page-profile");
+  el.innerHTML = `<h1>${t("profile")}</h1><div class="sub">Поделим</div>${skeletons(3, 70)}`;
+  let prof = null;
+  try { prof = await api("/api/me"); } catch (e) {}
 
-function renderBill(bill) {
-  const rows = bill.items.map(item => {
-    const myShare = item.shares.find(s => s.user_id === me.id);
-    const chips = item.shares.map(s => {
-      const p = bill.participants.find(p => p.user_id === s.user_id);
-      const name = p ? (p.name || p.user_id) : s.user_id;
-      return `<span class="avatar-chip ${s.user_id === me.id ? 'me' : ''}">${name}</span>`;
-    }).join("");
+  const initial = esc((me.first_name || "?").charAt(0).toUpperCase());
+  const photo = me.photo_url ? `style="background-image:url('${esc(me.photo_url)}')"` : "";
 
-    return `
-      <div class="item-row">
-        <div style="flex:1;">
-          <div class="item-select" data-item-id="${item.id}" data-checked="${!!myShare}">
-            <div class="checkbox ${myShare ? 'checked' : ''}"></div>
-            <div>
-              <div class="item-name">${item.name}</div>
-              <div class="muted">${fmt(item.total_price)} ${bill.currency}${item.qty > 1 ? ' · ' + item.qty + ' шт' : ''}</div>
-              <div class="avatars">${chips}</div>
-            </div>
-          </div>
+  el.innerHTML = `
+    <h1>${t("profile")}</h1>
+    
+    <div class="card">
+      <div class="profile-head">
+        <div class="avatar-big" ${photo}>${me.photo_url ? "" : initial}</div>
+        <div>
+          <div style="font-size:18px;font-weight:700">${esc(me.first_name || "")} ${esc(me.last_name || "")}</div>
+          ${me.username ? `<div style="color:var(--hint);font-size:13.5px">@${esc(me.username)}</div>` : ""}
         </div>
       </div>
-    `;
-  }).join("");
-
-  app.innerHTML = `
-    <h1>${bill.title}</h1>
-    <div class="muted">Отметь, что заказывал(а) ты. Если блюдо на компанию — пусть каждый, кто его ел, тоже отметит его у себя.</div>
-    <div class="card">${rows}</div>
-    <div class="card">
-      <div class="total-row"><span>Итого по чеку</span><span>${fmt(bill.total)} ${bill.currency}</span></div>
+      ${prof && prof.phone ? `<div class="prof-row"><span class="k">${t("phone")}</span><span>+${esc(prof.phone).replace(/^\+/, "")}</span></div>` : ""}
     </div>
-    <button id="inviteBtn" class="secondary">➕ Пригласить участников</button>
-    <button id="splitBtn">Посчитать, кто сколько должен</button>
-    <div id="splitResult"></div>
+
+    <div class="stat-grid stagger">
+      <div class="stat-cell"><div class="v money">${prof ? prof.bills_count : "—"}</div><div class="t">${t("stat_bills")}</div></div>
+      <div class="stat-cell"><div class="v money">${prof ? fmt(prof.total_spent) : "—"}</div><div class="t">${t("stat_spent")}</div></div>
+    </div>
+
+    <div class="section-title">${t("lang")}</div>
+    <div class="lang-row">
+      <div class="lang-pill ${LANG === "ru" ? "on" : ""}" data-lang="ru">Русский</div>
+      <div class="lang-pill ${LANG === "uz" ? "on" : ""}" data-lang="uz">O'zbekcha</div>
+      <div class="lang-pill ${LANG === "en" ? "on" : ""}" data-lang="en">English</div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <div style="font-size:13.5px;color:var(--hint);line-height:1.55">🤝 ${t("about")}</div>
+    </div>
   `;
 
-  app.querySelectorAll(".item-select").forEach(el => {
-    el.addEventListener("click", () => toggleClaim(el, bill.id));
-  });
-  document.getElementById("splitBtn").addEventListener("click", () => renderSplit(bill.id));
-  document.getElementById("inviteBtn").addEventListener("click", () => {
-    const botUsername = "YOUR_BOT_USERNAME"; // см. README — подставить username бота
-    const link = `https://t.me/${botUsername}?startapp=${bill.id}`;
-    tg.switchInlineQuery ? tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Скинь свою долю по чеку 👇')}`) : navigator.clipboard.writeText(link);
-  });
+  el.querySelectorAll(".lang-pill").forEach((p) =>
+    p.addEventListener("click", async () => {
+      haptic();
+      LANG = p.dataset.lang;
+      localStorage.setItem("podelim_lang", LANG);
+      applyTabLabels();
+      renderProfile();
+      toast(t("saved"));
+      try { await apiJson("/api/me/lang", "POST", { lang: LANG }); } catch (e) {}
+    }));
 }
 
-async function toggleClaim(el, billId) {
-  const itemId = el.dataset.itemId;
-  const isChecked = el.dataset.checked === "true";
+/* ============================================================
+   Экран счёта (открывается поверх вкладок)
+   ============================================================ */
+async function openBill(billId) {
+  currentBillId = billId;
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  const el = document.getElementById("page-bill");
+  el.classList.add("active");
+  window.scrollTo(0, 0);
+  el.innerHTML = `<button class="back-btn" id="backBtn">‹ ${t("bill_back")}</button>${skeletons(3)}`;
+  el.querySelector("#backBtn").addEventListener("click", () => showTab(currentTab));
   try {
-    if (isChecked) {
-      await api(`/api/bills/${billId}/claims/${itemId}`, { method: "DELETE" });
-    } else {
-      const form = new FormData();
-      form.append("item_id", itemId);
-      form.append("weight", "1");
-      await api(`/api/bills/${billId}/claims`, { method: "POST", body: form });
-    }
-    loadAndRenderBill();
-  } catch (err) {
-    tg.showAlert(err.message);
+    const bill = await api(`/api/bills/${billId}`);
+    renderBillView(el, bill);
+  } catch (e) {
+    el.innerHTML = `
+      <button class="back-btn" id="backBtn">‹ ${t("bill_back")}</button>
+      <div class="empty"><div class="ico">🔍</div><div class="t">${t("bill_not_found")}</div></div>`;
+    el.querySelector("#backBtn").addEventListener("click", () => showTab(currentTab));
   }
 }
 
-async function renderSplit(billId) {
-  const box = document.getElementById("splitResult");
-  box.innerHTML = `<div class="muted">Считаем…</div>`;
-  try {
-    const split = await api(`/api/bills/${billId}/split`);
-    const rows = split.per_user.map(u => `
-      <div class="split-row"><span>${u.name}</span><span>${fmt(u.amount)} ${split.currency}</span></div>
-    `).join("");
-    const warn = split.fully_claimed
-      ? ""
-      : `<div class="warn">⚠️ Не все позиции разобраны. Пока распределено меньше итога чека — попроси остальных отметить свои позиции.</div>`;
+function renderBillView(el, bill) {
+  const isCreator = bill.creator_id === me.id;
+  const isOpen = bill.status !== "closed";
+  const myP = bill.participants.find((p) => p.user_id === me.id);
+  const myConfirmed = !!(myP && myP.confirmed);
 
-    box.innerHTML = `<div class="card">${rows}${warn}</div>`;
-  } catch (err) {
-    box.innerHTML = errorCard(err.message);
+  const rows = bill.items.map((item) => {
+    const myShare = item.shares.find((s) => s.user_id === me.id);
+    const chips = item.shares.map((s) => {
+      const p = bill.participants.find((x) => x.user_id === s.user_id);
+      const nm = p ? (p.name || s.user_id) : s.user_id;
+      return `<span class="avatar-chip ${s.user_id === me.id ? "me" : ""}">${esc(nm)}</span>`;
+    }).join("");
+    return `
+      <div class="item-row">
+        <div class="checkbox ${myShare ? "on" : ""}" data-check="${item.id}" data-on="${!!myShare}">${checkSvg}</div>
+        <div class="item-body" data-claim="${item.id}" data-on="${!!myShare}">
+          <div class="item-name">${esc(item.name)}</div>
+          <div class="item-price money">${fmt(item.total_price, bill.currency)}${item.qty > 1 ? " · " + item.qty : ""}</div>
+          <div class="avatars">${chips}</div>
+        </div>
+        ${isCreator && isOpen ? `<button class="del-item" data-edit="${item.id}">✎</button>` : ""}
+      </div>`;
+  }).join("");
+
+  // Участники и их статус подтверждения
+  const partChips = bill.participants.map((p) => `
+    <span class="avatar-chip ${p.user_id === me.id ? "me" : ""}">${p.confirmed ? "✓ " : ""}${esc(p.name || p.user_id)}</span>`).join("");
+  const allConfirmed = bill.participants.length > 0 && bill.participants.every((p) => p.confirmed);
+
+  el.innerHTML = `
+    <button class="back-btn" id="backBtn">‹ ${t("bill_back")}</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <h1 style="flex:1;min-width:0">${esc(bill.title)}</h1>
+      ${isCreator && isOpen ? `<button class="del-item" id="renameBtn" title="${t("rename")}">✎</button>` : ""}
+    </div>
+    <div class="sub">${t("bill_hint")}</div>
+
+    <div class="card">
+      ${rows || ""}
+      ${isOpen ? `<div style="padding:10px 0 2px">
+        <button class="btn ghost small" id="addItemBtn">＋ ${t("add_item")}</button>
+      </div>` : ""}
+    </div>
+
+    <div class="card">
+      <div class="total-row"><span>${t("total")}</span><span class="money">${fmt(bill.total, bill.currency)}</span></div>
+    </div>
+
+    ${isOpen ? `
+    <div class="card">
+      <div style="font-size:12.5px;color:var(--hint);line-height:1.45;margin-bottom:9px">🔒 ${t("confirm_hint")}</div>
+      <div class="avatars" style="margin-bottom:10px">${partChips}</div>
+      ${allConfirmed ? `<div style="font-size:13px;color:var(--green);font-weight:600;margin-bottom:8px">${t("all_confirmed")}</div>` : ""}
+      <button class="btn ${myConfirmed ? "ghost" : ""} small" id="confirmBtn" style="width:100%">
+        ${myConfirmed ? "✓ " + t("confirmed_you") + " · " + t("change_choice") : "✅ " + t("confirm_choice")}
+      </button>
+    </div>` : ""}
+
+    <button class="btn ghost" id="inviteBtn">👥 ${t("invite")}</button>
+    <button class="btn" id="splitBtn">💸 ${t("calc")}</button>
+    <div id="splitResult"></div>
+    ${isCreator && isOpen ? `<button class="btn danger" id="closeBillBtn">${t("close_bill")}</button>` : ""}
+  `;
+
+  el.querySelector("#backBtn").addEventListener("click", () => showTab(currentTab));
+
+  const refresh = async () => {
+    const updated = await api(`/api/bills/${bill.id}`);
+    renderBillView(el, updated);
+  };
+
+  // Отметить/снять позицию
+  el.querySelectorAll("[data-claim],[data-check]").forEach((node) =>
+    node.addEventListener("click", async () => {
+      if (!isOpen) return;
+      haptic();
+      const itemId = node.dataset.claim || node.dataset.check;
+      const isOn = node.dataset.on === "true";
+      try {
+        if (isOn) {
+          await api(`/api/bills/${bill.id}/claims/${itemId}`, { method: "DELETE" });
+        } else {
+          const form = new FormData();
+          form.append("item_id", itemId);
+          form.append("weight", "1");
+          await api(`/api/bills/${bill.id}/claims`, { method: "POST", body: form });
+        }
+        await refresh();
+      } catch (e) { toast(t("error") + ": " + e.message); }
+    }));
+
+  // Общая шторка позиции: добавление и редактирование
+  function itemSheet(item) {
+    const isEdit = !!item;
+    openSheet(`
+      <div class="sheet-title">${isEdit ? t("edit_item") : t("add_item")}</div>
+      <div class="field"><label>${t("item_name")}</label><input id="itName" maxlength="80" value="${isEdit ? esc(item.name) : ""}"></div>
+      <div class="field-inline">
+        <div class="field"><label>${t("item_price")}</label><input id="itPrice" type="number" inputmode="decimal" min="0" value="${isEdit ? item.total_price : ""}"></div>
+        <div class="field" style="max-width:110px"><label>${t("item_qty")}</label><input id="itQty" type="number" inputmode="numeric" min="1" value="${isEdit ? item.qty : 1}"></div>
+      </div>
+      <button class="btn" id="itSaveBtn">${isEdit ? t("save") : t("add")}</button>
+      ${isEdit ? `<button class="btn danger" id="itDelBtn">🗑 ${t("delete_item")}</button>` : ""}
+    `);
+    document.getElementById("itSaveBtn").addEventListener("click", async () => {
+      const name = document.getElementById("itName").value.trim();
+      const price = parseFloat(document.getElementById("itPrice").value) || 0;
+      const qty = parseFloat(document.getElementById("itQty").value) || 1;
+      if (!name || price <= 0) return;
+      const body = { name, qty, unit_price: price / qty, total_price: price };
+      try {
+        if (isEdit) {
+          await apiJson(`/api/bills/${bill.id}/items/${item.id}`, "PATCH", body);
+        } else {
+          await apiJson(`/api/bills/${bill.id}/items`, "POST", body);
+        }
+        closeSheet();
+        toast(isEdit ? t("saved") : t("added"));
+        haptic("medium");
+        await refresh();
+      } catch (e) { toast(t("error") + ": " + e.message); }
+    });
+    if (isEdit) document.getElementById("itDelBtn").addEventListener("click", async () => {
+      haptic("medium");
+      try {
+        await api(`/api/bills/${bill.id}/items/${item.id}`, { method: "DELETE" });
+        closeSheet();
+        toast(t("removed"));
+        await refresh();
+      } catch (e) { toast(t("error") + ": " + e.message); }
+    });
+    if (!isEdit) setTimeout(() => document.getElementById("itName").focus(), 420);
   }
+
+  const addBtn = el.querySelector("#addItemBtn");
+  if (addBtn) addBtn.addEventListener("click", () => { haptic(); itemSheet(null); });
+
+  // Редактировать позицию (только создатель)
+  el.querySelectorAll("[data-edit]").forEach((btn) =>
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      haptic();
+      const item = bill.items.find((i) => i.id === Number(btn.dataset.edit));
+      if (item) itemSheet(item);
+    }));
+
+  // Переименовать счёт
+  const renameBtn = el.querySelector("#renameBtn");
+  if (renameBtn) renameBtn.addEventListener("click", () => {
+    haptic();
+    openSheet(`
+      <div class="sheet-title">${t("rename")}</div>
+      <div class="field"><label>${t("split_name")}</label><input id="renName" maxlength="60" value="${esc(bill.title)}"></div>
+      <button class="btn" id="renSaveBtn">${t("save")}</button>
+    `);
+    document.getElementById("renSaveBtn").addEventListener("click", async () => {
+      const title = document.getElementById("renName").value.trim();
+      if (!title) return;
+      try {
+        await apiJson(`/api/bills/${bill.id}`, "PATCH", { title });
+        closeSheet();
+        toast(t("saved"));
+        await refresh();
+      } catch (e) { toast(t("error") + ": " + e.message); }
+    });
+  });
+
+  // Подтверждение выбора (антифрод)
+  const confirmBtn = el.querySelector("#confirmBtn");
+  if (confirmBtn) confirmBtn.addEventListener("click", async () => {
+    haptic("medium");
+    try {
+      await api(`/api/bills/${bill.id}/confirm`, { method: myConfirmed ? "DELETE" : "POST" });
+      await refresh();
+    } catch (e) { toast(t("error") + ": " + e.message); }
+  });
+
+  // Пригласить
+  el.querySelector("#inviteBtn").addEventListener("click", () => {
+    haptic();
+    const link = `https://t.me/${BOT_USERNAME}?startapp=${bill.id}`;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t("invite_text"))}`;
+    try { tg.openTelegramLink(shareUrl); }
+    catch (e) { navigator.clipboard.writeText(link); toast("🔗 " + link); }
+  });
+
+  // Расчёт
+  el.querySelector("#splitBtn").addEventListener("click", async () => {
+    haptic("medium");
+    const box = el.querySelector("#splitResult");
+    box.innerHTML = `<div class="skel" style="height:90px;margin-top:10px"></div>`;
+    try {
+      const split = await api(`/api/bills/${bill.id}/split`);
+      const rows2 = split.per_user.map((u) => `
+        <div class="split-row"><span>${esc(u.name)}</span><b class="money">${fmt(u.amount, split.currency)}</b></div>`).join("");
+      const note = split.fully_claimed ? "" :
+        `<div class="warn">ℹ️ ${t("calc_note")} (${fmt(split.unclaimed_amount, split.currency)})</div>`;
+      const okLine = split.all_confirmed ?
+        `<div style="font-size:13px;color:var(--green);font-weight:600;margin-top:8px">${t("all_confirmed")}</div>` : "";
+      box.innerHTML = `<div class="card" style="margin-top:10px">${rows2}${note}${okLine}</div>`;
+    } catch (e) { box.innerHTML = ""; toast(t("error") + ": " + e.message); }
+  });
+
+  // Закрыть счёт
+  const closeBtn = el.querySelector("#closeBillBtn");
+  if (closeBtn) closeBtn.addEventListener("click", async () => {
+    haptic("medium");
+    try {
+      await apiJson(`/api/bills/${bill.id}/close`, "POST", {});
+      toast(t("closed_ok"));
+      showTab("splits");
+    } catch (e) { toast(t("error") + ": " + e.message); }
+  });
 }
 
-// ---------- Точка входа ----------
+/* ============================================================
+   Bottom sheet: открытие/закрытие + свайп вниз
+   ============================================================ */
+const sheet = document.getElementById("sheet");
+const backdrop = document.getElementById("sheet-backdrop");
+
+function openSheet(html) {
+  sheet.innerHTML = `<div class="sheet-grip"></div>` + html;
+  requestAnimationFrame(() => {
+    sheet.classList.add("open");
+    backdrop.classList.add("open");
+  });
+}
+function closeSheet() {
+  sheet.classList.remove("open", "dragging");
+  sheet.style.transform = "";
+  backdrop.classList.remove("open");
+}
+backdrop.addEventListener("click", closeSheet);
+
+// Драг-жест: скорость > 0.11 — закрываем независимо от дистанции;
+// вверх — с затуханием (damping), а не жёсткий стоп.
+let dragStartY = 0, dragDelta = 0, dragT0 = 0, dragging = false;
+sheet.addEventListener("pointerdown", (e) => {
+  if (["INPUT", "BUTTON", "TEXTAREA"].includes(e.target.tagName)) return;
+  if (sheet.scrollTop > 2) return;
+  dragging = true; dragStartY = e.clientY; dragDelta = 0; dragT0 = Date.now();
+  sheet.classList.add("dragging");
+  sheet.setPointerCapture(e.pointerId);
+});
+sheet.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  dragDelta = e.clientY - dragStartY;
+  const y = dragDelta > 0 ? dragDelta : dragDelta * 0.15; // затухание вверх
+  sheet.style.transform = `translateY(${y}px)`;
+});
+const endDrag = () => {
+  if (!dragging) return;
+  dragging = false;
+  sheet.classList.remove("dragging");
+  const velocity = Math.abs(dragDelta) / Math.max(1, Date.now() - dragT0);
+  if (dragDelta > 120 || (dragDelta > 20 && velocity > 0.11)) closeSheet();
+  else sheet.style.transform = "";
+};
+sheet.addEventListener("pointerup", endDrag);
+sheet.addEventListener("pointercancel", endDrag);
+
+/* ============================================================
+   Точка входа
+   ============================================================ */
 (function init() {
+  applyTabLabels();
   if (!initData) {
-    app.innerHTML = `<div class="muted">Открой это приложение через Telegram-бота, не напрямую в браузере.</div>`;
+    document.getElementById("pages").innerHTML =
+      `<div class="empty" style="padding-top:30vh"><div class="ico">🧾</div><div class="t">${t("open_via_tg")}</div></div>`;
+    document.getElementById("tabbar").style.display = "none";
     return;
   }
   if (currentBillId) {
-    loadAndRenderBill();
+    showTab("splits");
+    openBill(currentBillId);
   } else {
-    renderUpload();
+    showTab("home");
   }
 })();
 </script>

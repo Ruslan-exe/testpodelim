@@ -2,11 +2,20 @@
 Расчёт долгов участников. Это самая критичная логика продукта —
 именно здесь обеспечивается требование "общая сумма всегда должна сходиться".
 
-Метод: Decimal-арифметика (никаких float на последнем шаге) + метод
-наибольшего остатка (largest remainder method) для распределения копеек/тийинов,
-которые неизбежно возникают при делении, — чтобы сумма долей участников
-ВСЕГДА совпадала с total чека день в день, без "пропавших" 0.01.
+Правила:
+  1. Позиция, которую отметили конкретные люди, делится между ними
+     (пропорционально весам; по умолчанию поровну).
+  2. Позиция, которую НЕ отметил никто, делится поровну между ВСЕМИ
+     участниками счёта — чтобы никто не мог "забыть" отметить дорогое
+     блюдо и уйти от оплаты (антифрод-правило).
+  3. Налог и сервисный сбор раскладываются пропорционально доле каждого.
+  4. Метод наибольшего остатка (largest remainder) добивает копейки так,
+     чтобы сумма долей ВСЕГДА равнялась итогу чека.
+
+Метод: Decimal-арифметика — никаких float на последнем шаге.
 """
+from __future__ import annotations
+
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 
@@ -15,57 +24,68 @@ def _to_decimal(value) -> Decimal:
     return Decimal(str(value))
 
 
-def compute_split(bill, items_with_shares: list, tax: float, service_fee: float, total: float) -> dict:
+def compute_split(
+    bill,
+    items_with_shares: list,
+    tax: float,
+    service_fee: float,
+    total: float,
+    participant_ids: list | None = None,
+) -> dict:
     """
-    items_with_shares: список [(item_total_price, {user_id: weight, ...}), ...]
-        — для каждой позиции чека передаём её total_price и словарь
-        "кто участвует в этой позиции и с каким весом" (по умолчанию вес 1 у всех,
-        кто отметил себя на этой позиции — то есть блюдо на компанию делится поровну
-        между отметившимися, а не автоматически на всех участников счёта).
+    items_with_shares: [(item_total_price, {user_id: weight, ...}), ...]
+    participant_ids: все участники счёта — между ними делятся позиции,
+        которые никто явно не отметил.
 
-    Возвращает {user_id: Decimal(сумма к оплате)}, где сумма всех значений
-    ТОЧНО равна total (с точностью до минимальной денежной единицы).
+    Возвращает:
+      per_user        — {user_id: Decimal} — сумма всех значений ТОЧНО равна total
+      unclaimed_amount — сумма позиций, которые никто не отметил
+                         (они уже поделены на всех и вошли в per_user)
+      fully_claimed   — True, если каждую позицию кто-то отметил явно
     """
+    participant_ids = list(participant_ids or [])
     raw_per_user = defaultdict(Decimal)  # доля без учёта налога/сервиса
+    unclaimed_sum = Decimal("0")
 
     for item_total, shares in items_with_shares:
-        if not shares:
-            continue  # позицию ещё никто не забрал — не учитываем, пока не разберут
         item_total_d = _to_decimal(item_total)
-        weight_sum = _to_decimal(sum(shares.values()))
-        if weight_sum == 0:
-            continue
-        for user_id, weight in shares.items():
-            raw_per_user[user_id] += item_total_d * _to_decimal(weight) / weight_sum
+        weight_sum = _to_decimal(sum(shares.values())) if shares else Decimal("0")
 
-    subtotal_claimed = sum(raw_per_user.values()) if raw_per_user else Decimal("0")
+        if weight_sum > 0:
+            # Позицию отметили конкретные люди — делим между ними по весам
+            for user_id, weight in shares.items():
+                raw_per_user[user_id] += item_total_d * _to_decimal(weight) / weight_sum
+        elif participant_ids:
+            # Никто не отметил — делим поровну на всех участников счёта
+            unclaimed_sum += item_total_d
+            n = _to_decimal(len(participant_ids))
+            for user_id in participant_ids:
+                raw_per_user[user_id] += item_total_d / n
 
-    tax_d = _to_decimal(tax or 0)
-    service_d = _to_decimal(service_fee or 0)
-    extra_d = tax_d + service_d
+    subtotal_assigned = sum(raw_per_user.values()) if raw_per_user else Decimal("0")
+
+    extra_d = _to_decimal(tax or 0) + _to_decimal(service_fee or 0)
     total_d = _to_decimal(total)
 
+    # Налог/сервис — пропорционально доле каждого
     final_per_user = {}
-    if subtotal_claimed > 0:
+    if subtotal_assigned > 0:
         for user_id, amount in raw_per_user.items():
-            ratio = amount / subtotal_claimed
-            final_per_user[user_id] = amount + ratio * extra_d
-    else:
-        final_per_user = dict(raw_per_user)
+            final_per_user[user_id] = amount + (amount / subtotal_assigned) * extra_d
 
-    # Округление до 2 знаков (для UZS фактически центов не бывает, но оставляем
-    # универсально — на фронте можно округлить до целого тийина/сума отдельно)
-    rounded = {uid: amt.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for uid, amt in final_per_user.items()}
+    rounded = {
+        uid: amt.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        for uid, amt in final_per_user.items()
+    }
 
-    # Метод наибольшего остатка: если позиции разобраны ПОЛНОСТЬЮ (сумма распределённого
-    # покрывает total), досчитываем разницу в копейках до последней монеты.
-    distributed_sum = sum(rounded.values())
-    fully_claimed = subtotal_claimed >= (total_d - extra_d) - Decimal("0.01") if total_d else False
-
-    if fully_claimed and rounded:
+    # Метод наибольшего остатка: добиваем разницу в копейках, чтобы
+    # сумма долей точно совпала с итогом чека.
+    if rounded:
+        distributed_sum = sum(rounded.values())
         diff = (total_d - distributed_sum).quantize(Decimal("0.01"))
-        if diff != 0:
-            # остатки на основе дробной части необработанной суммы — крупным долям достаётся приоритет
+        # Страховка от кривых данных OCR (total сильно меньше/больше суммы
+        # позиций) — корректируем только "копеечные" расхождения.
+        if diff != 0 and abs(diff) <= Decimal("1.00"):
             remainders = sorted(
                 final_per_user.items(),
                 key=lambda kv: (kv[1] - kv[1].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
@@ -79,6 +99,6 @@ def compute_split(bill, items_with_shares: list, tax: float, service_fee: float,
 
     return {
         "per_user": rounded,
-        "unclaimed_amount": (total_d - sum(rounded.values())) if not fully_claimed else Decimal("0.00"),
-        "fully_claimed": fully_claimed,
+        "unclaimed_amount": unclaimed_sum,
+        "fully_claimed": unclaimed_sum == 0,
     }

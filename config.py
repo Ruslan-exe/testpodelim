@@ -26,8 +26,16 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or None  # None -> официальный endpoint OpenAI
 VISION_MODEL = os.getenv("VISION_MODEL", "gemini-2.5-flash")
 
-# Путь к SQLite базе (для MVP этого достаточно, миграция на Postgres — позже)
+# База данных.
+#   По умолчанию — SQLite-файл рядом с кодом: годится ТОЛЬКО для локальной
+#   разработки. На бесплатном Render диск стирается при каждом деплое/рестарте —
+#   данные пользователей ПРОПАДУТ.
+#   Для прода задай DATABASE_URL на бесплатный Postgres (Neon.tech / Supabase),
+#   см. README, раздел "База данных". Код менять не нужно — только эту переменную.
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./podelim.db")
+# Neon/Heroku выдают строки вида postgres:// — SQLAlchemy 2.x требует postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Валюта по умолчанию, если модель не смогла её распознать
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "UZS")

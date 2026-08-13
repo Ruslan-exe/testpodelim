@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Поделим</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #111);
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--tg-theme-hint-color, #888); font-size: 13px; margin-bottom: 16px; }
+  .card {
+    background: var(--tg-theme-secondary-bg-color, #f3f3f3); border-radius: 14px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,.15); }
+  .item-row:last-child { border-bottom: none; }
+  .item-name { font-weight: 600; }
+  .item-price { font-variant-numeric: tabular-nums; }
+  .avatars { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+  .avatar-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(128,128,128,.2); }
+  .avatar-chip.me { background: var(--tg-theme-button-color, #2ea6ff); color: var(--tg-theme-button-text-color, #fff); }
+  button {
+    width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600;
+    background: var(--tg-theme-button-color, #2ea6ff); color: var(--tg-theme-button-text-color, #fff);
+    margin-top: 8px; cursor: pointer;
+  }
+  button.secondary { background: transparent; border: 1px solid rgba(128,128,128,.4); color: inherit; }
+  button:disabled { opacity: .5; }
+  input[type=file] { display: none; }
+  .upload-box {
+    border: 2px dashed rgba(128,128,128,.4); border-radius: 14px; padding: 32px 16px;
+    text-align: center; cursor: pointer;
+  }
+  .total-row { display: flex; justify-content: space-between; font-size: 17px; font-weight: 700; margin-top: 10px; }
+  .split-row { display: flex; justify-content: space-between; padding: 8px 0; }
+  .warn { color: #e0a000; font-size: 13px; margin-top: 6px; }
+  .item-select { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .checkbox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(128,128,128,.5); flex-shrink: 0; }
+  .checkbox.checked { background: var(--tg-theme-button-color, #2ea6ff); border-color: var(--tg-theme-button-color, #2ea6ff); }
+  #loading { text-align: center; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="loading">Загрузка…</div>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+// !!! ЗАМЕНИТЬ на реальный адрес backend после деплоя (см. README) !!!
+const API_BASE = "https://YOUR-BACKEND-DOMAIN.example.com";
+
+const initData = tg.initData || "";
+const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
+
+let currentBillId = new URLSearchParams(window.location.search).get("startapp") ||
+  (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || null;
+
+const app = document.getElementById("app");
+
+async function api(path, options = {}) {
+  const res = await fetch(API_BASE + path, {
+    ...options,
+    headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+function fmt(n) {
+  return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+}
+
+// ---------- Экран 1: создать счёт (нет активного billId) ----------
+function renderUpload() {
+  app.innerHTML = `
+    <h1>Поделим 🧾</h1>
+    <div class="muted">Сфоткай чек — разложим по позициям автоматически</div>
+    <label class="upload-box" for="photoInput">
+      <div style="font-size:32px;">📷</div>
+      <div>Нажми, чтобы сделать фото или выбрать из галереи</div>
+    </label>
+    <input type="file" id="photoInput" accept="image/*" capture="environment">
+    <div id="uploadStatus" class="muted" style="margin-top:10px;"></div>
+  `;
+  document.getElementById("photoInput").addEventListener("change", onPhotoSelected);
+}
+
+async function onPhotoSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById("uploadStatus");
+  status.textContent = "Распознаём чек, это займёт несколько секунд…";
+
+  const form = new FormData();
+  form.append("photo", file);
+
+  try {
+    const bill = await api("/api/bills", { method: "POST", body: form });
+    currentBillId = bill.id;
+    history.replaceState(null, "", `?startapp=${bill.id}`);
+    renderBill(bill);
+  } catch (err) {
+    status.textContent = "Не получилось распознать чек: " + err.message + ". Попробуй фото почётче.";
+  }
+}
+
+// ---------- Экран 2: разбор позиций ----------
+async function loadAndRenderBill() {
+  try {
+    const bill = await api(`/api/bills/${currentBillId}`);
+    renderBill(bill);
+  } catch (err) {
+    app.innerHTML = `<div class="muted">Счёт не найден или устарел.</div>`;
+  }
+}
+
+function renderBill(bill) {
+  const rows = bill.items.map(item => {
+    const myShare = item.shares.find(s => s.user_id === me.id);
+    const chips = item.shares.map(s => {
+      const p = bill.participants.find(p => p.user_id === s.user_id);
+      const name = p ? (p.name || p.user_id) : s.user_id;
+      return `<span class="avatar-chip ${s.user_id === me.id ? 'me' : ''}">${name}</span>`;
+    }).join("");
+
+    return `
+      <div class="item-row">
+        <div style="flex:1;">
+          <div class="item-select" data-item-id="${item.id}" data-checked="${!!myShare}">
+            <div class="checkbox ${myShare ? 'checked' : ''}"></div>
+            <div>
+              <div class="item-name">${item.name}</div>
+              <div class="muted">${fmt(item.total_price)} ${bill.currency}${item.qty > 1 ? ' · ' + item.qty + ' шт' : ''}</div>
+              <div class="avatars">${chips}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  app.innerHTML = `
+    <h1>${bill.title}</h1>
+    <div class="muted">Отметь, что заказывал(а) ты. Если блюдо на компанию — пусть каждый, кто его ел, тоже отметит его у себя.</div>
+    <div class="card">${rows}</div>
+    <div class="card">
+      <div class="total-row"><span>Итого по чеку</span><span>${fmt(bill.total)} ${bill.currency}</span></div>
+    </div>
+    <button id="inviteBtn" class="secondary">➕ Пригласить участников</button>
+    <button id="splitBtn">Посчитать, кто сколько должен</button>
+    <div id="splitResult"></div>
+  `;
+
+  app.querySelectorAll(".item-select").forEach(el => {
+    el.addEventListener("click", () => toggleClaim(el, bill.id));
+  });
+  document.getElementById("splitBtn").addEventListener("click", () => renderSplit(bill.id));
+  document.getElementById("inviteBtn").addEventListener("click", () => {
+    const botUsername = "YOUR_BOT_USERNAME"; // см. README — подставить username бота
+    const link = `https://t.me/${botUsername}?startapp=${bill.id}`;
+    tg.switchInlineQuery ? tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Скинь свою долю по чеку 👇')}`) : navigator.clipboard.writeText(link);
+  });
+}
+
+async function toggleClaim(el, billId) {
+  const itemId = el.dataset.itemId;
+  const isChecked = el.dataset.checked === "true";
+  try {
+    if (isChecked) {
+      await api(`/api/bills/${billId}/claims/${itemId}`, { method: "DELETE" });
+    } else {
+      const form = new FormData();
+      form.append("item_id", itemId);
+      form.append("weight", "1");
+      await api(`/api/bills/${billId}/claims`, { method: "POST", body: form });
+    }
+    loadAndRenderBill();
+  } catch (err) {
+    tg.showAlert("Ошибка: " + err.message);
+  }
+}
+
+async function renderSplit(billId) {
+  const box = document.getElementById("splitResult");
+  box.innerHTML = `<div class="muted">Считаем…</div>`;
+  try {
+    const split = await api(`/api/bills/${billId}/split`);
+    const rows = split.per_user.map(u => `
+      <div class="split-row"><span>${u.name}</span><span>${fmt(u.amount)} ${split.currency}</span></div>
+    `).join("");
+    const warn = split.fully_claimed
+      ? ""
+      : `<div class="warn">⚠️ Не все позиции разобраны. Пока распределено меньше итога чека — попроси остальных отметить свои позиции.</div>`;
+
+    box.innerHTML = `<div class="card">${rows}${warn}</div>`;
+  } catch (err) {
+    box.innerHTML = `<div class="muted">Ошибка: ${err.message}</div>`;
+  }
+}
+
+// ---------- Точка входа ----------
+(function init() {
+  if (!initData) {
+    app.innerHTML = `<div class="muted">Открой это приложение через Telegram-бота, не напрямую в браузере.</div>`;
+    return;
+  }
+  if (currentBillId) {
+    loadAndRenderBill();
+  } else {
+    renderUpload();
+  }
+})();
+</script>
+</body>
+</html>

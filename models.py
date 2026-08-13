@@ -23,6 +23,7 @@ class User(Base):
     phone = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     username = Column(String, nullable=True)
+    lang = Column(String, default="ru")  # ru | uz | en — язык интерфейса
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -69,6 +70,9 @@ class Participant(Base):
     bill_id = Column(Integer, ForeignKey("bills.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
     display_name = Column(String, nullable=True)
+    # Антифрод: участник подтвердил свой выбор позиций. Любое изменение
+    # позиций счёта (создателем) сбрасывает подтверждения у ВСЕХ.
+    confirmed = Column(Boolean, default=False)
 
     bill = relationship("Bill", back_populates="participants")
 
