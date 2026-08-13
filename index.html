@@ -718,35 +718,70 @@ const initData = tg.initData || "";
 const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
 detectLang(me);
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Пробуждаем бесплатный Render СРАЗУ при открытии приложения — пока
+// пользователь смотрит онбординг/анимации, сервер уже поднимается.
+try { fetch(API_BASE + "/openapi.json").catch(() => {}); } catch (e) {}
+
 async function api(path, options = {}) {
-  // Таймаут 45с: бесплатный Render "просыпается" до минуты; без таймаута
-  // экран навсегда остаётся в состоянии загрузки.
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 45000);
-  try {
-    const res = await fetch(API_BASE + path, {
-      ...options,
-      signal: ctrl.signal,
-      headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
-    });
-    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-    return res.json();
-  } finally {
-    clearTimeout(timer);
+  // Надёжная загрузка: GET-запросы сами повторяются до 4 раз с паузами
+  // (2с → 4с → 8с → 12с) — этого хватает, чтобы "уснувший" бесплатный
+  // сервер успел проснуться (до ~60с). Экран ошибки — только если сервер
+  // реально недоступен. POST/DELETE не повторяем, чтобы не задвоить данные.
+  const method = (options.method || "GET").toUpperCase();
+  const canRetry = method === "GET";
+  const delays = [2000, 4000, 8000, 12000];
+
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 65000);
+    try {
+      const res = await fetch(API_BASE + path, {
+        ...options,
+        signal: ctrl.signal,
+        headers: { "X-Telegram-Init-Data": initData, ...(options.headers || {}) },
+      });
+      if (!res.ok) {
+        // 5xx — сервер поднимается/упал: пробуем ещё; 4xx — повторять бессмысленно
+        if (res.status >= 500 && canRetry && attempt < delays.length) {
+          clearTimeout(timer);
+          await sleep(delays[attempt]);
+          continue;
+        }
+        throw new Error(`${res.status}: ${await res.text()}`);
+      }
+      return await res.json();
+    } catch (e) {
+      clearTimeout(timer);
+      const netFail = e.name === "AbortError" || e.name === "TypeError" || e instanceof TypeError;
+      if (netFail && canRetry && attempt < delays.length) {
+        await sleep(delays[attempt]);
+        continue;
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 
 // Экран ошибки с кнопкой "Повторить" — вместо вечных скелетонов
-function errorState(retryFn) {
+function errorState(retryFn, err) {
   const id = "retry_" + Math.random().toString(36).slice(2, 8);
   setTimeout(() => {
     const b = document.getElementById(id);
     if (b) b.addEventListener("click", retryFn);
   }, 0);
+  // 404 на новых эндпоинтах = на сервере задеплоен СТАРЫЙ backend
+  const outdated = err && String(err.message || "").startsWith("404");
+  const text = outdated
+    ? "На сервере старая версия backend — новые функции ему неизвестны. Загрузите папку backend/ на GitHub и дождитесь деплоя Render (Dashboard → Events: должно быть «Deploy live», а не «Deploy failed»)."
+    : t("err_net");
   return `
     <div class="empty">
-      <div class="ico">📡</div>
-      <div class="t">${t("err_net")}</div>
+      <div class="ico">${outdated ? "🔄" : "📡"}</div>
+      <div class="t">${text}</div>
       <button class="btn ghost small" id="${id}" style="margin-top:14px">↻ ${t("retry")}</button>
     </div>`;
 }
@@ -837,7 +872,7 @@ async function renderHome() {
     ]);
     renderHomeContent(el, summary, debts);
   } catch (e) {
-    el.innerHTML = `<h1>${t("hello")} 👋</h1>` + errorState(renderHome);
+    el.innerHTML = `<h1>${t("hello")} 👋</h1>` + errorState(renderHome, e);
   }
 }
 
@@ -945,7 +980,7 @@ async function renderSplits() {
     el.querySelectorAll("[data-bill]").forEach((c) =>
       c.addEventListener("click", () => openBill(c.dataset.bill)));
   } catch (e) {
-    el.innerHTML = `<h1>${t("my_splits")}</h1>` + errorState(renderSplits);
+    el.innerHTML = `<h1>${t("my_splits")}</h1>` + errorState(renderSplits, e);
   }
 }
 
@@ -1035,7 +1070,9 @@ async function onPhotoSelected(e) {
    Страница 4 — Профиль
    ============================================================ */
 function referralLink() {
-  return `https://t.me/${BOT_USERNAME}?startapp=ref_${me.id}`;
+  // ?start= (а не ?startapp=) — работает без настройки Main Mini App:
+  // бот сам зафиксирует дружбу и даст кнопку открытия приложения
+  return `https://t.me/${BOT_USERNAME}?start=ref_${me.id}`;
 }
 
 function shareReferral() {
@@ -1420,7 +1457,7 @@ function renderBillView(el, bill) {
   // Пригласить
   el.querySelector("#inviteBtn").addEventListener("click", () => {
     haptic();
-    const link = `https://t.me/${BOT_USERNAME}?startapp=${bill.id}`;
+    const link = `https://t.me/${BOT_USERNAME}?start=${bill.id}`;
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t("invite_text"))}`;
     try { tg.openTelegramLink(shareUrl); }
     catch (e) { navigator.clipboard.writeText(link); toast("🔗 " + link); }
