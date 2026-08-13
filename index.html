@@ -505,8 +505,8 @@ input[type=file] { display: none; }
 /* ============================================================
    Конфигурация — поменять после деплоя (см. README)
    ============================================================ */
-const API_BASE = "https://YOUR-BACKEND-DOMAIN.example.com";
-const BOT_USERNAME = "YOUR_BOT_USERNAME";
+const API_BASE = "https://testpodelim.onrender.com";
+const BOT_USERNAME = "testpodelim_bot";
 
 /* ============================================================
    Локализация: ru / uz / en
@@ -1625,6 +1625,25 @@ function renderOnboarding(step) {
    ============================================================ */
 (function init() {
   applyTabLabels();
+  // Проверка конфигурации: если заглушки не заменены — объясняем разработчику,
+  // что именно вписать (вместо бесконечных сетевых ошибок).
+  if (API_BASE.includes("example.com") || BOT_USERNAME === "YOUR_BOT_USERNAME") {
+    document.getElementById("pages").innerHTML = `
+      <div class="card" style="margin-top:24px;border:2px solid var(--red)">
+        <div style="font-weight:800;font-size:16px;margin-bottom:8px">⚠️ Приложение не настроено</div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--hint)">
+          В начале файла <b>frontend/index.html</b> замените:<br><br>
+          1. <b>API_BASE</b> → адрес backend с Render,<br>
+          например <i>https://podelim-xxxx.onrender.com</i><br><br>
+          2. <b>BOT_USERNAME</b> → username вашего бота из BotFather
+          (без @), например <i>podelim_uz_bot</i><br><br>
+          Сейчас: <code>${esc(API_BASE)}</code> / <code>${esc(BOT_USERNAME)}</code><br><br>
+          Подробнее — README, шаг 5.
+        </div>
+      </div>`;
+    document.getElementById("tabbar").style.display = "none";
+    return;
+  }
   if (!initData) {
     document.getElementById("pages").innerHTML =
       `<div class="empty" style="padding-top:30vh"><div class="ico">🧾</div><div class="t">${t("open_via_tg")}</div></div>`;
