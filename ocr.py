@@ -34,14 +34,28 @@ def _get_client() -> OpenAI:
     return _client
 
 
-def _shrink_image(raw_bytes: bytes, max_side: int = 1600, quality: int = 82) -> bytes:
-    """Сжимает фото перед отправкой в API — экономит деньги на каждом чеке."""
+def _shrink_image(raw_bytes: bytes, max_side: int = 2200, quality: int = 92) -> bytes:
+    """Готовит фото чека для vision-модели.
+
+    Чеки — длинные и узкие, с мелким термошрифтом. Старые настройки
+    (1600px, quality 82) «убивали» мелкий текст — модель начинала
+    угадывать цифры. Теперь: больше разрешение, авто-контраст и
+    лёгкая резкость — это даёт основной прирост точности бесплатно.
+    """
+    from PIL import ImageOps, ImageEnhance
+
     img = Image.open(io.BytesIO(raw_bytes))
+    img = ImageOps.exif_transpose(img)  # уважаем ориентацию с телефона
     img = img.convert("RGB")
+
     w, h = img.size
     scale = min(1.0, max_side / max(w, h))
     if scale < 1.0:
-        img = img.resize((int(w * scale), int(h * scale)))
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+    img = ImageOps.autocontrast(img, cutoff=1)          # вытянуть блёклую термопечать
+    img = ImageEnhance.Sharpness(img).enhance(1.4)      # подчеркнуть мелкие цифры
+
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=quality)
     return buf.getvalue()
@@ -65,25 +79,27 @@ SYSTEM_PROMPT = """Ты распознаёшь фото чека (Узбекис
 Правила:
 - total — это итоговая сумма к оплате, как написано в чеке. Это самое важное поле,
   не ошибись в нём.
-- Если в чеке нет отдельных полей налога/сервисного сбора — верни 0.
+- ПРОВЕРЬ СЕБЯ перед ответом: сумма total_price всех позиций + tax + service_fee
+  должна сходиться с total (допустимо расхождение на округления). Если не сходится —
+  перечитай чек ещё раз: скорее всего ты пропустил позицию или перепутал цифру.
+- Читай ЦЕНЫ ВНИМАТЕЛЬНО по разрядам: в UZS суммы крупные (десятки/сотни тысяч),
+  разделители тысяч (пробелы, точки, запятые) — не десятичная часть.
+  "65 000" и "65.000" — это 65000, а не 65.
 - Если qty не указано явно — считай 1.
 - Если total_price позиции не совпадает с qty*unit_price (округления в самом чеке) —
   используй то, что реально напечатано в чеке, не пересчитывай.
+- Названия позиций пиши как в чеке (узбекский/русский), не переводи.
+- Скидки: если после позиции идёт строка скидки — вычти её из total_price позиции.
+- Не включай в items строки "Итого", "Наличные", "Сдача", "НДС" — это не позиции.
 - Если что-то не читается — сделай лучшее предположение, не выдумывай позиции,
   которых нет на фото."""
 
 
-def parse_receipt(image_bytes: bytes) -> dict:
-    """Отправляет фото чека в vision-модель и возвращает разобранную структуру.
-
-    Возвращает dict с ключами currency/items/subtotal/tax/service_fee/total.
-    Бросает ValueError, если модель вернула не-JSON (редко, но нужно уметь
-    показать пользователю "не смогли распознать, попробуй фото почётче").
-    """
+def _call_vision(b64: str, extra_note: str = "") -> dict:
     client = _get_client()
-    small = _shrink_image(image_bytes)
-    b64 = base64.b64encode(small).decode("utf-8")
-
+    user_text = "Распознай этот чек и верни JSON по описанной схеме."
+    if extra_note:
+        user_text += "\n\n" + extra_note
     response = client.chat.completions.create(
         model=VISION_MODEL,
         messages=[
@@ -91,7 +107,7 @@ def parse_receipt(image_bytes: bytes) -> dict:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "Распознай этот чек и верни JSON по описанной схеме."},
+                    {"type": "text", "text": user_text},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                 ],
             },
@@ -99,12 +115,51 @@ def parse_receipt(image_bytes: bytes) -> dict:
         temperature=0,
         response_format={"type": "json_object"},
     )
-
     raw = response.choices[0].message.content
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError as e:
         raise ValueError(f"Модель вернула не-JSON, распознавание не удалось: {e}\n{raw}")
+
+
+def _sums_ok(data: dict, tolerance: float = 0.02) -> bool:
+    """Арифметическая проверка: позиции + налог + сервис ≈ итог чека."""
+    try:
+        items_sum = sum(float(i.get("total_price") or 0) for i in data.get("items", []))
+        extra = float(data.get("tax") or 0) + float(data.get("service_fee") or 0)
+        total = float(data.get("total") or 0)
+        if total <= 0 or not data.get("items"):
+            return False
+        return abs(items_sum + extra - total) <= max(total * tolerance, 1.0)
+    except (TypeError, ValueError):
+        return False
+
+
+def parse_receipt(image_bytes: bytes) -> dict:
+    """Отправляет фото чека в vision-модель и возвращает разобранную структуру.
+
+    Двухпроходная схема: если после первого прохода сумма позиций не сходится
+    с итогом чека — модель получает второй шанс с прямым указанием на ошибку.
+    Это дёшево (второй вызов только при расхождении) и заметно поднимает точность.
+    """
+    small = _shrink_image(image_bytes)
+    b64 = base64.b64encode(small).decode("utf-8")
+
+    data = _call_vision(b64)
+
+    if not _sums_ok(data):
+        try:
+            items_sum = sum(float(i.get("total_price") or 0) for i in data.get("items", []))
+            retry = _call_vision(
+                b64,
+                "ВНИМАНИЕ: в прошлый раз сумма распознанных позиций "
+                f"({items_sum:.0f}) не сошлась с итогом чека ({data.get('total')}). "
+                "Перечитай чек заново, особенно цены и пропущенные строки, и верни исправленный JSON.",
+            )
+            if _sums_ok(retry):
+                data = retry
+        except Exception:
+            pass  # второй проход — бонус; при сбое остаёмся с первым результатом
 
     data.setdefault("currency", DEFAULT_CURRENCY)
     data.setdefault("items", [])
