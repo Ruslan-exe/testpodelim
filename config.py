@@ -24,7 +24,10 @@ MINI_APP_URL = os.getenv("MINI_APP_URL", "https://example.com")
 #   VISION_MODEL=gemini-2.5-flash
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or None  # None -> официальный endpoint OpenAI
-VISION_MODEL = os.getenv("VISION_MODEL", "gemini-2.5-flash")
+# Для новых ключей Google (формат "AQ.") доступны модели поколения 3.x:
+#   gemini-3.1-pro-preview — точнее (рекомендуется для сложных чеков)
+#   старые gemini-2.5-* для новых аккаунтов отключены (API вернёт 404)
+VISION_MODEL = os.getenv("VISION_MODEL", "gemini-3.1-pro-preview")
 
 # База данных.
 #   По умолчанию — SQLite-файл рядом с кодом: годится ТОЛЬКО для локальной

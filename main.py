@@ -67,7 +67,7 @@ async def telegram_webhook(request: Request):
 
 
 @app.get("/api/health")
-def health(ocr_test: int = 0):
+def health(ocr_test: int = 0, models: int = 0):
     """Диагностика конфигурации (без секретов). /api/health?ocr_test=1 —
     делает реальный тестовый вызов vision-модели и показывает ошибку, если есть."""
     from config import OPENAI_API_KEY, OPENAI_BASE_URL, VISION_MODEL, DATABASE_URL
@@ -90,6 +90,12 @@ def health(ocr_test: int = 0):
             info["ocr_test"] = "OK ✅: " + (ping_model() or "")[:60]
         except Exception as e:
             info["ocr_test"] = f"ОШИБКА ❌ {type(e).__name__}: {str(e)[:400]}"
+    if models:
+        try:
+            from ocr import list_models
+            info["available_models"] = list_models()
+        except Exception as e:
+            info["available_models"] = f"ОШИБКА ❌ {type(e).__name__}: {str(e)[:300]}"
     return info
 
 

@@ -156,6 +156,23 @@ def _native_generate(parts: list, max_tokens: int | None = None) -> str:
         raise ValueError(f"Неожиданный ответ Gemini: {e}: {str(data)[:400]}")
 
 
+def list_models() -> list:
+    """Список моделей, доступных ЭТОМУ ключу (для /api/health?models=1)."""
+    resp = httpx.get(
+        f"{_GOOGLE_NATIVE}/models",
+        headers={"x-goog-api-key": OPENAI_API_KEY},
+        params={"pageSize": 100},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise ValueError(f"Gemini API {resp.status_code}: {resp.text[:300]}")
+    return sorted(
+        m["name"].replace("models/", "")
+        for m in resp.json().get("models", [])
+        if "generateContent" in m.get("supportedGenerationMethods", [])
+    )
+
+
 def ping_model() -> str:
     """Мини-запрос для /api/health — проверяет ключ, endpoint и модель."""
     if _use_native_google():
