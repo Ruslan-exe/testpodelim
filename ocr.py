@@ -114,31 +114,99 @@ SYSTEM_PROMPT = """Ты распознаёшь фото чека (Узбекис
   которых нет на фото."""
 
 
-def _call_vision(b64: str, extra_note: str = "") -> dict:
+# --- Нативный Gemini API ---
+# С 2026 Google выдаёт в AI Studio ключи нового формата "AQ." вместо "AIza".
+# Такие ключи НЕ принимаются OpenAI-совместимым endpoint'ом (/v1beta/openai/) —
+# он отвечает 401. Поэтому для Google ходим напрямую в нативный Gemini API.
+# Для сторонних OpenAI-совместимых провайдеров (OpenRouter, Groq — запасные
+# варианты из README) остаётся старый путь через библиотеку openai.
+import httpx
+
+_GOOGLE_NATIVE = "https://generativelanguage.googleapis.com/v1beta"
+
+
+def _use_native_google() -> bool:
+    base = OPENAI_BASE_URL or ""
+    return OPENAI_API_KEY.startswith("AQ.") or "generativelanguage.googleapis.com" in base
+
+
+def _native_generate(parts: list, max_tokens: int | None = None) -> str:
+    """Вызов нативного Gemini generateContent. Возвращает текст ответа."""
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY не задан — распознавание работать не будет.")
+    gen_cfg = {"temperature": 0, "response_mime_type": "application/json"}
+    if max_tokens:
+        gen_cfg = {"temperature": 0, "maxOutputTokens": max_tokens}
+    resp = httpx.post(
+        f"{_GOOGLE_NATIVE}/models/{VISION_MODEL}:generateContent",
+        headers={"x-goog-api-key": OPENAI_API_KEY, "Content-Type": "application/json"},
+        json={
+            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [{"parts": parts}],
+            "generationConfig": gen_cfg,
+        },
+        timeout=120,
+    )
+    if resp.status_code != 200:
+        raise ValueError(f"Gemini API {resp.status_code}: {resp.text[:400]}")
+    data = resp.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Неожиданный ответ Gemini: {e}: {str(data)[:400]}")
+
+
+def ping_model() -> str:
+    """Мини-запрос для /api/health — проверяет ключ, endpoint и модель."""
+    if _use_native_google():
+        return _native_generate([{"text": "Ответь одним словом: работаю"}], max_tokens=10)
     client = _get_client()
+    r = client.chat.completions.create(
+        model=VISION_MODEL,
+        messages=[{"role": "user", "content": "Ответь одним словом: работаю"}],
+        max_tokens=10,
+    )
+    return r.choices[0].message.content or ""
+
+
+def _call_vision(b64: str, extra_note: str = "") -> dict:
     user_text = "Распознай этот чек и верни JSON по описанной схеме."
     if extra_note:
         user_text += "\n\n" + extra_note
-    response = client.chat.completions.create(
-        model=VISION_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
-                ],
-            },
-        ],
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
-    raw = response.choices[0].message.content
+
+    if _use_native_google():
+        raw = _native_generate([
+            {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
+            {"text": user_text},
+        ])
+    else:
+        client = _get_client()
+        response = client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
+                    ],
+                },
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content
+
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Модель вернула не-JSON, распознавание не удалось: {e}\n{raw}")
+        # Gemini иногда оборачивает JSON в ```json ... ``` — снимаем обёртку
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("```")[1]
+            cleaned = cleaned[4:] if cleaned.startswith("json") else cleaned
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, IndexError) as e:
+        raise ValueError(f"Модель вернула не-JSON, распознавание не удалось: {e}\n{raw[:300]}")
 
 
 def _sums_ok(data: dict, tolerance: float = 0.02) -> bool:

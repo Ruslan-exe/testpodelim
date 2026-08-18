@@ -79,16 +79,15 @@ def health(ocr_test: int = 0):
         "vision_model": VISION_MODEL,
         "db": "postgres ✅" if DATABASE_URL.startswith("postgres") else "sqlite ⚠️ (данные сотрутся при рестарте)",
     }
+    from ocr import _use_native_google
+    info["ocr_route"] = (
+        "нативный Gemini API ✅ (ключ AQ.)" if _use_native_google()
+        else "OpenAI-совместимый endpoint"
+    )
     if ocr_test:
         try:
-            from ocr import _get_client
-            client = _get_client()
-            r = client.chat.completions.create(
-                model=VISION_MODEL,
-                messages=[{"role": "user", "content": "Ответь одним словом: работаю"}],
-                max_tokens=10,
-            )
-            info["ocr_test"] = "OK ✅: " + (r.choices[0].message.content or "")[:60]
+            from ocr import ping_model
+            info["ocr_test"] = "OK ✅: " + (ping_model() or "")[:60]
         except Exception as e:
             info["ocr_test"] = f"ОШИБКА ❌ {type(e).__name__}: {str(e)[:400]}"
     return info
