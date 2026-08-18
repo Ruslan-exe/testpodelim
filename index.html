@@ -527,7 +527,10 @@ const I18N = {
     scan_tap: "Нажмите, чтобы снять чек", scan_or: "или выберите фото из галереи",
     scanning: "Распознаём чек…", scan_step1: "Фото загружено", scan_step2: "Читаем позиции",
     scan_step3: "Считаем суммы", scan_fail: "Не получилось распознать чек. Попробуйте фото почётче.",
-    scan_tip: "Совет: снимайте чек целиком, при хорошем свете, без бликов.",
+    scan_tip: "Снимайте чек целиком, при хорошем свете, без бликов. Скриншоты и повёрнутые фото тоже читаем.",
+    scan_camera: "Снять камерой", scan_gallery: "Из галереи",
+    how_works: "Как это работает",
+    hw1: "Сфотографируйте чек или выберите фото", hw2: "ИИ разберёт позиции и суммы за секунды", hw3: "Отметьте своё — и поделите счёт с друзьями",
     profile: "Профиль", phone: "Телефон", username: "Ник", lang: "Язык",
     stat_bills: "счетов", stat_spent: "потрачено всего",
     about: "Поделим — делите счета честно. Один платит, потом каждый видит свою точную долю.",
@@ -588,7 +591,10 @@ const I18N = {
     scan_tap: "Chekni suratga olish uchun bosing", scan_or: "yoki galereyadan tanlang",
     scanning: "Chek o'qilmoqda…", scan_step1: "Surat yuklandi", scan_step2: "Pozitsiyalar o'qilmoqda",
     scan_step3: "Summalar hisoblanmoqda", scan_fail: "Chekni o'qib bo'lmadi. Aniqroq surat qiling.",
-    scan_tip: "Maslahat: chekni to'liq, yaxshi yorug'likda, aks-siz suratga oling.",
+    scan_tip: "Chekni to'liq, yaxshi yorug'likda, aks-siz suratga oling. Skrinshotlar va burilgan suratlarni ham o'qiymiz.",
+    scan_camera: "Kamera bilan olish", scan_gallery: "Galereyadan",
+    how_works: "Bu qanday ishlaydi",
+    hw1: "Chekni suratga oling yoki rasm tanlang", hw2: "AI pozitsiyalar va summalarni soniyalarda ajratadi", hw3: "O'zingiznikini belgilang — chekni do'stlar bilan bo'ling",
     profile: "Profil", phone: "Telefon", username: "Nik", lang: "Til",
     stat_bills: "ta chek", stat_spent: "jami sarflandi",
     about: "Podelim — cheklarni adolatli bo'ling. Bittangiz to'laydi, keyin har kim o'z aniq ulushini ko'radi.",
@@ -649,7 +655,10 @@ const I18N = {
     scan_tap: "Tap to photograph a receipt", scan_or: "or pick one from the gallery",
     scanning: "Reading the receipt…", scan_step1: "Photo uploaded", scan_step2: "Reading items",
     scan_step3: "Calculating totals", scan_fail: "Couldn't read the receipt. Try a sharper photo.",
-    scan_tip: "Tip: capture the whole receipt in good light, avoid glare.",
+    scan_tip: "Capture the whole receipt in good light, avoid glare. Screenshots and rotated photos work too.",
+    scan_camera: "Use camera", scan_gallery: "From gallery",
+    how_works: "How it works",
+    hw1: "Photograph the receipt or pick a photo", hw2: "AI parses items and totals in seconds", hw3: "Mark yours — and split with friends",
     profile: "Profile", phone: "Phone", username: "Username", lang: "Language",
     stat_bills: "bills", stat_spent: "total spent",
     about: "Podelim — split bills fairly. One pays, then everyone sees their exact share.",
@@ -1019,17 +1028,33 @@ function renderScan() {
   el.innerHTML = `
     <h1>${t("scan_title")}</h1>
     <div class="sub">${t("scan_sub")}</div>
-    <label class="upload-zone" for="photoInput">
-      <div class="ico">📷</div>
-      <div class="t1">${t("scan_tap")}</div>
-      <div class="t2">${t("scan_or")}</div>
-    </label>
-    <input type="file" id="photoInput" accept="image/*" capture="environment">
-    <div class="card" style="margin-top:14px">
-      <div style="font-size:13.5px;color:var(--hint);line-height:1.5">💡 ${t("scan_tip")}</div>
+
+    <div class="hero" style="text-align:center;padding:26px 16px 22px">
+      <div style="font-size:52px;line-height:1">🧾</div>
+      <div style="font-size:17px;font-weight:800;margin-top:10px">${t("scan_tap")}</div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <label for="cameraInput" style="flex:1;background:rgba(255,255,255,.94);color:#1a7a56;border-radius:14px;padding:13px 6px;font-weight:700;font-size:14px;cursor:pointer;transition:transform 160ms var(--ease-out)" class="pressable">📷 ${t("scan_camera")}</label>
+        <label for="galleryInput" style="flex:1;background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:14px;padding:13px 6px;font-weight:700;font-size:14px;cursor:pointer" class="pressable">🖼 ${t("scan_gallery")}</label>
+      </div>
+    </div>
+    <!-- Камера: capture заставляет открыть камеру. Галерея: БЕЗ capture,
+         иначе Telegram/Android не дают выбрать существующее фото -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment">
+    <input type="file" id="galleryInput" accept="image/*">
+
+    <div class="section-title">${t("how_works")}</div>
+    <div class="card stagger">
+      <div class="step-row done" style="color:var(--text)"><div class="step-dot" style="border-color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent)">1</div>${t("hw1")}</div>
+      <div class="step-row done" style="color:var(--text)"><div class="step-dot" style="border-color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent)">2</div>${t("hw2")}</div>
+      <div class="step-row done" style="color:var(--text)"><div class="step-dot" style="border-color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent)">3</div>${t("hw3")}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:13.5px;color:var(--hint);line-height:1.55">💡 ${t("scan_tip")}</div>
     </div>
   `;
-  el.querySelector("#photoInput").addEventListener("change", onPhotoSelected);
+  el.querySelector("#cameraInput").addEventListener("change", onPhotoSelected);
+  el.querySelector("#galleryInput").addEventListener("change", onPhotoSelected);
 }
 
 async function onPhotoSelected(e) {

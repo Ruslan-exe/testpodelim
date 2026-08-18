@@ -49,8 +49,15 @@ def _shrink_image(raw_bytes: bytes, max_side: int = 2200, quality: int = 92) -> 
     img = img.convert("RGB")
 
     w, h = img.size
-    scale = min(1.0, max_side / max(w, h))
-    if scale < 1.0:
+    longest = max(w, h)
+    if longest > max_side:
+        scale = max_side / longest
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    elif longest < 1400:
+        # Маленькие фото/скриншоты (чек в треть кадра шириной ~300px) —
+        # УВЕЛИЧИВАЕМ: vision-модель выделяет больше "внимания" крупным
+        # изображениям, и мелкие цифры перестают угадываться.
+        scale = 1400 / longest
         img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
     img = ImageOps.autocontrast(img, cutoff=1)          # вытянуть блёклую термопечать
@@ -75,6 +82,18 @@ SYSTEM_PROMPT = """Ты распознаёшь фото чека (Узбекис
   "service_fee": число или null,
   "total": число
 }
+
+Особенности фото (ВАЖНО):
+- Фото может быть СКРИНШОТОМ переписки/галереи: игнорируй интерфейс телефона
+  (часы, батарею, кнопки, подписи чата) — читай только сам бумажный чек.
+- Чек может быть ПОВЁРНУТ на 90°/180°, наклонён, смят или изогнут — мысленно
+  выпрями и поверни его, читай все строки.
+- Чек может занимать малую часть кадра — сосредоточься только на нём.
+- В ресторанных чеках Узбекистана часто ДВЕ колонки цифр: "Кол-во" и "Сумма".
+  Строка "Мохито 1л   10   600 000" значит qty=10 и total_price=600000 —
+  НЕ склеивай колонки в одно число 10600000! Сначала пойми структуру колонок
+  по заголовку таблицы, потом читай строки.
+- Строка "обслуживание 15%" — это service_fee, не позиция.
 
 Правила:
 - total — это итоговая сумма к оплате, как написано в чеке. Это самое важное поле,
@@ -108,7 +127,7 @@ def _call_vision(b64: str, extra_note: str = "") -> dict:
                 "role": "user",
                 "content": [
                     {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
                 ],
             },
         ],
