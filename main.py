@@ -66,6 +66,34 @@ async def telegram_webhook(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/health")
+def health(ocr_test: int = 0):
+    """Диагностика конфигурации (без секретов). /api/health?ocr_test=1 —
+    делает реальный тестовый вызов vision-модели и показывает ошибку, если есть."""
+    from config import OPENAI_API_KEY, OPENAI_BASE_URL, VISION_MODEL, DATABASE_URL
+
+    info = {
+        "ocr_key_set": bool(OPENAI_API_KEY),
+        "ocr_key_prefix": (OPENAI_API_KEY[:6] + "…") if OPENAI_API_KEY else None,
+        "ocr_base_url": OPENAI_BASE_URL or "⚠️ НЕ ЗАДАН → запросы идут в api.openai.com, а не в Gemini!",
+        "vision_model": VISION_MODEL,
+        "db": "postgres ✅" if DATABASE_URL.startswith("postgres") else "sqlite ⚠️ (данные сотрутся при рестарте)",
+    }
+    if ocr_test:
+        try:
+            from ocr import _get_client
+            client = _get_client()
+            r = client.chat.completions.create(
+                model=VISION_MODEL,
+                messages=[{"role": "user", "content": "Ответь одним словом: работаю"}],
+                max_tokens=10,
+            )
+            info["ocr_test"] = "OK ✅: " + (r.choices[0].message.content or "")[:60]
+        except Exception as e:
+            info["ocr_test"] = f"ОШИБКА ❌ {type(e).__name__}: {str(e)[:400]}"
+    return info
+
+
 def get_current_user(
     db: Session = Depends(get_db),
     x_telegram_init_data: str = Header(default=""),
