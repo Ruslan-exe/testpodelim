@@ -373,14 +373,24 @@ input[type=file] { display: none; }
 /* ---------- Тост ---------- */
 #toast {
   position: fixed; top: calc(12px + var(--safe-top)); left: 50%; z-index: 200;
-  transform: translate(-50%, -160%);
+  /* Спрятанное состояние: уводим на 100% собственной высоты + весь верхний
+     отступ + запас — гарантированно за краем экрана при любом safe-top
+     (в fullscreen отступ большой, и прежних -160% не хватало: пустой
+     тост торчал чёрной точкой по центру экрана). */
+  transform: translate(-50%, calc(-100% - 24px - var(--safe-top)));
+  visibility: hidden;
   background: var(--text); color: var(--bg);
   padding: 11px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
-  transition: transform 300ms var(--ease-out);
+  /* visibility прячется с задержкой 300ms, чтобы анимация ухода успела доиграть */
+  transition: transform 300ms var(--ease-out), visibility 0s linear 300ms;
   max-width: 88vw; text-align: center;
   box-shadow: 0 6px 24px rgba(0,0,0,0.18);
 }
-#toast.show { transform: translate(-50%, 0); }
+#toast.show {
+  transform: translate(-50%, 0);
+  visibility: visible;
+  transition: transform 300ms var(--ease-out);
+}
 
 /* ---------- Скелетоны ---------- */
 .skel {
