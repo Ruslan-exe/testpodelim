@@ -32,6 +32,13 @@
   --r-lg: 20px;
   --r-md: 14px;
   --r-sm: 10px;
+
+  /* Fullscreen (Bot API 8.0): Telegram сам задаёт эти переменные.
+     --tg-safe-area-inset-top — системный статус-бар (часы, батарея),
+     --tg-content-safe-area-inset-top — плавающие кнопки Telegram.
+     Вне fullscreen обе равны 0, так что отступы ничего не ломают. */
+  --safe-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+  --safe-bottom: max(env(safe-area-inset-bottom), var(--tg-safe-area-inset-bottom, 0px));
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -51,7 +58,7 @@ body {
 
 /* ---------- Каркас ---------- */
 #pages {
-  padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+  padding: calc(16px + var(--safe-top)) 16px calc(84px + var(--safe-bottom));
   max-width: 520px;
   margin: 0 auto;
   min-height: 100vh;
@@ -311,7 +318,7 @@ input[type=file] { display: none; }
   background: color-mix(in srgb, var(--card) 88%, transparent);
   -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
 }
 #tabbar .inner { display: flex; max-width: 520px; margin: 0 auto; }
 .tab {
@@ -336,7 +343,7 @@ input[type=file] { display: none; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
   background: var(--card);
   border-radius: 22px 22px 0 0;
-  padding: 8px 18px calc(20px + env(safe-area-inset-bottom));
+  padding: 8px 18px calc(20px + var(--safe-bottom));
   max-width: 520px; margin: 0 auto;
   transform: translateY(100%);
   transition: transform 400ms var(--ease-drawer);
@@ -365,7 +372,7 @@ input[type=file] { display: none; }
 
 /* ---------- Тост ---------- */
 #toast {
-  position: fixed; top: 12px; left: 50%; z-index: 200;
+  position: fixed; top: calc(12px + var(--safe-top)); left: 50%; z-index: 200;
   transform: translate(-50%, -160%);
   background: var(--text); color: var(--bg);
   padding: 11px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
@@ -406,11 +413,11 @@ input[type=file] { display: none; }
   position: fixed; inset: 0; z-index: 300;
   background: var(--bg);
   display: flex; flex-direction: column;
-  padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+  padding: calc(24px + var(--safe-top)) 24px calc(24px + var(--safe-bottom));
   overflow-y: auto;
 }
 .onb-skip {
-  position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 18px;
+  position: absolute; top: calc(14px + var(--safe-top)); right: 18px;
   border: none; background: none; color: var(--hint); font-size: 14px;
   font-weight: 600; font-family: inherit; cursor: pointer; padding: 6px;
 }
@@ -742,6 +749,26 @@ function syncTelegramChrome() {
 }
 syncTelegramChrome();
 try { tg.onEvent("themeChanged", syncTelegramChrome); } catch (e) {}
+
+// Fullscreen (Bot API 8.0): раскрываем приложение на весь экран, но только
+// на телефонах — на компьютере и в вебе fullscreen для Mini App выглядит
+// плохо, там остаётся обычное окно. Старые клиенты Telegram (< 8.0) метод
+// не знают — для них всё работает как раньше, просто без fullscreen.
+function enterFullscreen() {
+  try {
+    const mobile = tg.platform === "ios" || tg.platform === "android";
+    if (mobile && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0") &&
+        tg.requestFullscreen && !tg.isFullscreen) {
+      tg.requestFullscreen();
+    }
+  } catch (e) {}
+}
+enterFullscreen();
+// Если клиент не смог войти в fullscreen — молча живём в обычном режиме
+try { tg.onEvent("fullscreenFailed", () => {}); } catch (e) {}
+// В fullscreen жест "свайп вниз" не должен случайно сворачивать приложение
+// при прокрутке списков (Bot API 7.7)
+try { if (tg.disableVerticalSwipes) tg.disableVerticalSwipes(); } catch (e) {}
 
 const initData = tg.initData || "";
 const me = (tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
