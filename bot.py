@@ -39,10 +39,10 @@ dp = Dispatcher()
 TEXTS = {
     "ru": {
         "share_phone": "📱 Поделиться номером",
-        "open_app": "🧾 Открыть Поделим",
+        "open_app": "🧾 Открыть Tolash",
         "welcome_back": "С возвращением! 👋\n\nОткрывай приложение — траты, долги и чеки уже ждут.",
         "welcome": (
-            "Привет! Я — <b>Поделим</b> 🧾\n\n"
+            "Привет! Я — <b>Tolash</b> 🧾\n\n"
             "Один платит за всех — потом делим честно:\n"
             "  📸  сфоткай чек — разложу его по позициям сам\n"
             "  ✍️  или впиши траты вручную\n"
@@ -57,10 +57,10 @@ TEXTS = {
     },
     "uz": {
         "share_phone": "📱 Raqamni ulashish",
-        "open_app": "🧾 Podelimni ochish",
+        "open_app": "🧾 Tolashni ochish",
         "welcome_back": "Qaytganingiz bilan! 👋\n\nIlovani oching — xarajatlar, qarzlar va cheklar sizni kutmoqda.",
         "welcome": (
-            "Salom! Men — <b>Podelim</b> 🧾\n\n"
+            "Salom! Men — <b>Tolash</b> 🧾\n\n"
             "Bittangiz hamma uchun to'laydi — keyin adolatli bo'lamiz:\n"
             "  📸  chekni suratga oling — o'zim ajratib beraman\n"
             "  ✍️  yoki xarajatlarni qo'lda kiriting\n"
@@ -75,10 +75,10 @@ TEXTS = {
     },
     "en": {
         "share_phone": "📱 Share phone number",
-        "open_app": "🧾 Open Podelim",
+        "open_app": "🧾 Open Tolash",
         "welcome_back": "Welcome back! 👋\n\nOpen the app — your expenses, debts and receipts are waiting.",
         "welcome": (
-            "Hi! I'm <b>Podelim</b> 🧾\n\n"
+            "Hi! I'm <b>Tolash</b> 🧾\n\n"
             "One person pays for everyone — then we split it fairly:\n"
             "  📸  snap the receipt — I'll parse every item\n"
             "  ✍️  or add expenses manually\n"

@@ -1,5 +1,5 @@
 """
-FastAPI backend для Mini App "Поделим".
+FastAPI backend для Mini App "Tolash".
 
 Эндпоинты:
   POST /api/bills                  -> создать счёт из фото (OCR)
@@ -18,7 +18,8 @@ from collections import defaultdict
 from pydantic import BaseModel
 from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Form, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from fastapi.middleware.gzip import GZipMiddleware
+from sqlalchemy.orm import Session, selectinload
 from aiogram.types import Update
 
 from sqlalchemy import func, or_, and_
@@ -31,7 +32,7 @@ from telegram_auth import validate_init_data
 from config import USE_WEBHOOK, PUBLIC_BACKEND_URL, WEBHOOK_SECRET
 from bot import bot as tg_bot, dp as tg_dp
 
-app = FastAPI(title="Podelim API")
+app = FastAPI(title="Tolash API")
 
 # CORS открыт широко, т.к. Mini App может быть захостен отдельно от API —
 # для MVP это ок, для прода лучше сузить до конкретного домена.
@@ -41,6 +42,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Сжатие ответов — списки счетов на медленном мобильном интернете
+# приезжают в несколько раз быстрее.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
 @app.on_event("startup")
@@ -63,6 +68,14 @@ async def telegram_webhook(request: Request):
     payload = await request.json()
     update = Update.model_validate(payload)
     await tg_dp.feed_update(tg_bot, update)
+    return {"ok": True}
+
+
+@app.get("/api/ping")
+def ping():
+    """Максимально лёгкий эндпоинт: им фронтенд будит 'уснувший' бесплатный
+    Render при открытии приложения, и его же можно дёргать внешним
+    пинговалкой (UptimeRobot и т.п.), чтобы сервер вообще не засыпал."""
     return {"ok": True}
 
 
@@ -227,13 +240,13 @@ def create_bill(
 
     db.add(Participant(bill_id=bill.id, user_id=user.id, display_name=user.first_name))
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.get("/api/bills/{bill_id}")
 def get_bill(bill_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    bill = db.get(Bill, bill_id)
+    bill = _get_bill_full(db, bill_id)
     if not bill:
         raise HTTPException(status_code=404, detail="Счёт не найден")
 
@@ -245,7 +258,7 @@ def get_bill(bill_id: int, db: Session = Depends(get_db), user: User = Depends(g
         # Совместный счёт = автоматически друзья с создателем
         _ensure_friends(db, user.id, bill.creator_id)
         db.commit()
-        db.refresh(bill)
+        bill = _get_bill_full(db, bill_id)
 
     return _serialize_bill(bill)
 
@@ -294,8 +307,8 @@ def claim_item(
         # Отметка за гостя меняет доли всех — все перепроверяют
         _reset_confirmations(bill)
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.delete("/api/bills/{bill_id}/claims/{item_id}")
@@ -321,13 +334,13 @@ def unclaim_item(
     else:
         _reset_confirmations(bill)
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.get("/api/bills/{bill_id}/split")
 def get_split(bill_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    bill = db.get(Bill, bill_id)
+    bill = _get_bill_full(db, bill_id)
     if not bill:
         raise HTTPException(status_code=404, detail="Счёт не найден")
 
@@ -371,10 +384,33 @@ def _bill_split(bill: Bill) -> dict:
     )
 
 
+# Жадная загрузка связей счёта одним пакетом запросов. Без неё SQLAlchemy
+# лениво догружает позиции/доли/участников по одному запросу на каждый счёт
+# и каждую позицию (N+1) — на удалённом Postgres это и давало многосекундные
+# задержки при открытии вкладок.
+_BILL_EAGER = (
+    selectinload(Bill.items).selectinload(Item.shares),
+    selectinload(Bill.participants),
+)
+
+
+def _get_bill_full(db: Session, bill_id: int) -> Bill | None:
+    return (
+        db.query(Bill)
+        .options(*_BILL_EAGER)
+        .filter(Bill.id == bill_id)
+        .first()
+    )
+
+
 def _my_bills(db: Session, user_id: int) -> list:
-    """Все счета, где пользователь — участник."""
-    rows = db.query(Participant).filter(Participant.user_id == user_id).all()
-    return [r.bill for r in rows if r.bill is not None]
+    """Все счета, где пользователь — участник (со всеми связями за ~4 запроса)."""
+    bill_ids = [
+        r[0] for r in db.query(Participant.bill_id).filter(Participant.user_id == user_id).all()
+    ]
+    if not bill_ids:
+        return []
+    return db.query(Bill).options(*_BILL_EAGER).filter(Bill.id.in_(bill_ids)).all()
 
 
 PERIODS = {"day": 1, "week": 7, "month": 30, "all": None}
@@ -551,8 +587,8 @@ def create_manual_bill(
         ))
     db.add(Participant(bill_id=bill.id, user_id=user.id, display_name=user.first_name))
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.post("/api/bills/{bill_id}/items")
@@ -576,8 +612,8 @@ def add_item(
     bill.total = (bill.total or 0) + total_price
     _reset_confirmations(bill)
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.patch("/api/bills/{bill_id}/items/{item_id}")
@@ -608,8 +644,8 @@ def edit_item(
 
     _reset_confirmations(bill)
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 class BillUpdate(BaseModel):
@@ -631,8 +667,8 @@ def edit_bill(
         raise HTTPException(status_code=403, detail="Переименовать счёт может только создатель")
     bill.title = payload.title.strip() or bill.title
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.post("/api/bills/{bill_id}/confirm")
@@ -645,8 +681,7 @@ def confirm_choice(bill_id: int, db: Session = Depends(get_db), user: User = Dep
         if p.user_id == user.id:
             p.confirmed = True
             db.commit()
-            db.refresh(bill)
-            return _serialize_bill(bill)
+            return _serialize_bill(_get_bill_full(db, bill.id))
     raise HTTPException(status_code=403, detail="Вы не участник этого счёта")
 
 
@@ -660,8 +695,7 @@ def unconfirm_choice(bill_id: int, db: Session = Depends(get_db), user: User = D
         if p.user_id == user.id:
             p.confirmed = False
             db.commit()
-            db.refresh(bill)
-            return _serialize_bill(bill)
+            return _serialize_bill(_get_bill_full(db, bill.id))
     raise HTTPException(status_code=403, detail="Вы не участник этого счёта")
 
 
@@ -748,7 +782,7 @@ def add_participant_from_friends(
         ))
         _ensure_friends(db, friend.id, bill.creator_id)
         db.commit()
-        db.refresh(bill)
+        bill = _get_bill_full(db, bill_id)
     return _serialize_bill(bill)
 
 
@@ -775,8 +809,8 @@ def add_guest(
     db.flush()
     db.add(Participant(bill_id=bill.id, user_id=guest.id, display_name=name))
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.delete("/api/bills/{bill_id}/items/{item_id}")
@@ -798,8 +832,8 @@ def delete_item(
     db.delete(item)
     _reset_confirmations(bill)
     db.commit()
-    db.refresh(bill)
-    return _serialize_bill(bill)
+    # После commit связи «протухают» — перечитываем счёт одним пакетом запросов
+    return _serialize_bill(_get_bill_full(db, bill.id))
 
 
 @app.post("/api/bills/{bill_id}/close")
