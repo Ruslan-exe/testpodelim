@@ -455,6 +455,21 @@ def get_me(db: Session = Depends(get_db), user: User = Depends(get_current_user)
     }
 
 
+@app.get("/api/me/home")
+def my_home(
+    period: str = Query(default="month"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Всё для главного экрана одним запросом (вместо 4 отдельных round-trip)."""
+    return {
+        "summary": my_summary(period=period, db=db, user=user),
+        "debts": my_debts(db=db, user=user),
+        "bills": my_bills(db=db, user=user),
+        "profile": get_me(db=db, user=user),
+    }
+
+
 @app.post("/api/me/lang")
 def set_lang(payload: LangUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if payload.lang not in ("ru", "uz", "en"):

@@ -34,8 +34,8 @@ class Friendship(Base):
     __tablename__ = "friendships"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    friend_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    friend_id = Column(Integer, ForeignKey("users.id"), index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -43,7 +43,7 @@ class Bill(Base):
     __tablename__ = "bills"
 
     id = Column(Integer, primary_key=True)
-    creator_id = Column(Integer, ForeignKey("users.id"))
+    creator_id = Column(Integer, ForeignKey("users.id"), index=True)
     title = Column(String, default="Счёт")
     currency = Column(String, default="UZS")
 
@@ -64,7 +64,7 @@ class Item(Base):
     __tablename__ = "items"
 
     id = Column(Integer, primary_key=True)
-    bill_id = Column(Integer, ForeignKey("bills.id"))
+    bill_id = Column(Integer, ForeignKey("bills.id"), index=True)
     name = Column(String)
     qty = Column(Float, default=1.0)
     unit_price = Column(Float, default=0.0)
@@ -79,8 +79,8 @@ class Participant(Base):
     __tablename__ = "participants"
 
     id = Column(Integer, primary_key=True)
-    bill_id = Column(Integer, ForeignKey("bills.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
+    bill_id = Column(Integer, ForeignKey("bills.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
     display_name = Column(String, nullable=True)
     # Антифрод: участник подтвердил свой выбор позиций. Любое изменение
     # позиций счёта (создателем) сбрасывает подтверждения у ВСЕХ.
@@ -98,8 +98,8 @@ class ItemShare(Base):
     __tablename__ = "item_shares"
 
     id = Column(Integer, primary_key=True)
-    item_id = Column(Integer, ForeignKey("items.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
+    item_id = Column(Integer, ForeignKey("items.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
     weight = Column(Float, default=1.0)
 
     item = relationship("Item", back_populates="shares")
